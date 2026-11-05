@@ -113,45 +113,99 @@ app.get('/api/qr/generar', verificarToken, esMonitorOAdmin, (req, res) => {
     res.json({ qrToken });
 });
 
-// 3. Registrar Asistencia (Escaneo desde el móvil del Personal)
+// 3. Endpoint de Registro de Asistencia Automático (Entrada/Salida y Cálculo de Horas)
 app.post('/api/asistencia/registrar', verificarToken, async (req, res) => {
     const { qrToken } = req.body;
     const numeroControl = req.usuario.numeroControl;
 
-    if (!qrToken) return res.status(400).json({ mensaje: "Código QR no enviado" });
+    if (!qrToken) {
+        return res.status(400).json({ mensaje: "Código QR no proporcionado." });
+    }
 
     try {
-        // Validar vigencia de 10 segundos
+        // 1. Validar la autenticidad y expiración de 10 segundos del código QR
         const decoded = jwt.verify(qrToken, JWT_SECRET);
 
-        // Verificar si el QR ya se utilizó
+        // 2. Verificar que el QR no haya sido reutilizado
         const checkQr = await db.query('SELECT token FROM qr_tokens_usados WHERE token = $1', [decoded.nonce]);
         if (checkQr.rows.length > 0) {
             return res.status(400).json({ mensaje: "Este código QR ya fue utilizado por otra persona." });
         }
 
-        // Marcar el token como consumido
+        // 3. Marcar el token QR como consumido
         await db.query('INSERT INTO qr_tokens_usados (token) VALUES ($1)', [decoded.nonce]);
 
-        // Registrar asistencia en PostgreSQL
-        const insertQuery = `
-            INSERT INTO asistencias (numero_control, fecha_hora) 
-            VALUES ($1, CURRENT_TIMESTAMP) 
-            RETURNING id, fecha_hora;
+        // 4. Determinar automáticamente si es ENTRADA o SALIDA consultando el último registro de HOY
+        const ultimoRegistroQuery = `
+            SELECT tipo_registro 
+            FROM asistencias 
+            WHERE numero_control = $1 AND fecha_hora::date = CURRENT_DATE 
+            ORDER BY fecha_hora DESC 
+            LIMIT 1;
         `;
-        const result = await db.query(insertQuery, [numeroControl]);
+        const ultimoRes = await db.query(ultimoRegistroQuery, [numeroControl]);
+
+        let nuevoTipo = 'ENTRADA';
+        if (ultimoRes.rows.length > 0 && ultimoRes.rows[0].tipo_registro === 'ENTRADA') {
+            nuevoTipo = 'SALIDA';
+        }
+
+        // 5. Registrar el nuevo movimiento en PostgreSQL
+        const insertQuery = `
+            INSERT INTO asistencias (numero_control, fecha_hora, tipo_registro) 
+            VALUES ($1, CURRENT_TIMESTAMP, $2) 
+            RETURNING id, fecha_hora, tipo_registro;
+        `;
+        const insertRes = await db.query(insertQuery, [numeroControl, nuevoTipo]);
+        const nuevoRegistro = insertRes.rows[0];
+
+        // 6. Si el registro fue SALIDA, calcular las horas acumuladas del día
+        let horasMensaje = "";
+        if (nuevoTipo === 'SALIDA') {
+            const historialHoyQuery = `
+                SELECT tipo_registro, fecha_hora 
+                FROM asistencias 
+                WHERE numero_control = $1 AND fecha_hora::date = CURRENT_DATE 
+                ORDER BY fecha_hora ASC;
+            `;
+            const historialHoyRes = await db.query(historialHoyQuery, [numeroControl]);
+            const registrosHoy = historialHoyRes.rows;
+
+            let msTotales = 0;
+            let entradaTemp = null;
+
+            // Recorrer los registros ordenados para calcular bloques
+            for (const reg of registrosHoy) {
+                if (reg.tipo_registro === 'ENTRADA') {
+                    entradaTemp = new Date(reg.fecha_hora);
+                } else if (reg.tipo_registro === 'SALIDA' && entradaTemp) {
+                    const salidaTemp = new Date(reg.fecha_hora);
+                    msTotales += (salidaTemp - entradaTemp);
+                    entradaTemp = null; // Reiniciar para el siguiente bloque
+                }
+            }
+
+            // Convertir milisegundos a horas y minutos
+            const minutosTotales = Math.floor(msTotales / (1000 * 60));
+            const horas = Math.floor(minutosTotales / 60);
+            const minutos = minutosTotales % 60;
+
+            horasMensaje = ` Tiempo acumulado hoy: ${horas}h ${minutos}m (Meta diaria: 4h).`;
+        }
 
         res.status(201).json({
             exito: true,
-            mensaje: "Asistencia registrada correctamente",
-            registro: result.rows[0]
+            tipo: nuevoTipo,
+            mensaje: `¡${nuevoTipo} registrada con éxito!${horasMensaje}`,
+            registro: nuevoRegistro
         });
 
     } catch (error) {
         if (error.name === 'TokenExpiredError') {
-            return res.status(400).json({ mensaje: "El código QR ha expirado. Por favor escanea el nuevo código en pantalla." });
+            return res.status(400).json({ mensaje: "El código QR ha expirado. Escanea el nuevo código en pantalla." });
         }
-        res.status(500).json({ mensaje: "Error al procesar el registro de asistencia" });
+        console.error("Error al registrar asistencia:", error);
+        res.status(500).json({ mensaje: "Error interno al procesar el registro de asistencia." });
     }
 });
 
