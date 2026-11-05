@@ -222,10 +222,21 @@
             }
         });
 
-        function cerrarSesion() {
-            localStorage.removeItem('display_jwt_token');
-            mostrarVistaLogin();
-        }
+        // Función para cerrar la sesión del monitor y redirigir a login.html
+function cerrarSesion() {
+    // 1. Si existe un temporizador activo del QR dinámico, lo detenemos
+    if (intervaloTimer) {
+        clearInterval(intervaloTimer);
+    }
+
+    // 2. Limpiamos los tokens de autenticación almacenados localmente
+    localStorage.removeItem('display_jwt_token');
+    localStorage.removeItem('jwt_token');
+    localStorage.removeItem('usuario_info');
+
+    // 3. Redirigimos al usuario a la vista de inicio de sesión general
+    window.location.href = '/login.html';
+}
 
         // Verificación inicial de sesión al cargar la página
         if (localStorage.getItem('display_jwt_token')) {
