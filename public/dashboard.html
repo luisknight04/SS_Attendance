@@ -176,27 +176,30 @@
     </div>
 
     <!-- LÓGICA DE JAVASCRIPT -->
+    <!-- LÓGICA DE JAVASCRIPT CONECTADA AL BACKEND -->
     <script>
         lucide.createIcons();
         const token = localStorage.getItem('jwt_token');
 
-        // Validar sesión de administrador
+        // 1. Validar sesión de administrador antes de cargar
         if (!token) {
             window.location.href = '/login.html';
         }
 
-        // Cargar información del Administrador y Tabla
+        // 2. Cargar información del Administrador y Tabla de asistencias
         async function cargarDashboard() {
             try {
-                // Decodificar usuario desde localStorage
+                // Decodificar info del administrador desde localStorage
                 const usuario = JSON.parse(localStorage.getItem('usuario_info') || '{}');
                 if (usuario.nombre) {
-                    document.getElementById('admin-nombre').innerText = usuario.nombre;
+                    const nombreCompleto = `${usuario.nombre} ${usuario.apellidoPaterno || ''}`.trim();
+                    document.getElementById('admin-nombre').innerText = nombreCompleto;
                     document.getElementById('admin-nc').innerText = "NC: " + usuario.numeroControl;
+                    document.getElementById('admin-avatar').innerText = usuario.nombre.substring(0, 2).toUpperCase();
                 }
 
-                // Petición de asistencias (Simulada/Conectada al backend)
-                const res = await fetch('/api/asistencia/mis-reportes', {
+                // Petición HTTP al backend para obtener todas las asistencias
+                const res = await fetch('/api/admin/asistencias', {
                     headers: { 'Authorization': 'Bearer ' + token }
                 });
 
@@ -206,36 +209,71 @@
                 }
 
                 const data = await res.json();
-                renderizarTabla(data.asistencias || []);
+                
+                // Actualizar métricas y tabla si la petición fue exitosa
+                if (data.exito) {
+                    renderizarMetricasYTabla(data.asistencias || [], data.totalPersonal || 0);
+                }
             } catch (err) {
                 console.error("Error al cargar dashboard:", err);
+                document.getElementById('contenedor-filas').innerHTML = `
+                    <tr><td colspan="4" class="py-6 text-center text-rose-500 font-semibold">Error al conectar con el servidor.</td></tr>
+                `;
             }
         }
 
-        function renderizarTabla(asistencias) {
+        // 3. Renderizar las tarjetas de KPIs y la tabla dinámicamente
+        function renderizarMetricasYTabla(asistencias, totalPersonal) {
             const tbody = document.getElementById('contenedor-filas');
+            
+            // Actualizar Tarjetas de Métricas (KPIs)
+            document.getElementById('kpi-total').innerText = totalPersonal;
             document.getElementById('kpi-registros-hoy').innerText = asistencias.length;
-            document.getElementById('kpi-total').innerText = "48";
-            document.getElementById('kpi-presentes').innerText = asistencias.length;
+            
+            // Contar marcajes únicos de hoy para el KPI "Presentes Hoy"
+            const hoyStr = new Date().toDateString();
+            const usuariosHoy = new Set(
+                asistencias
+                    .filter(a => new Date(a.fecha_hora).toDateString() === hoyStr)
+                    .map(a => a.numero_control)
+            );
+            document.getElementById('kpi-presentes').innerText = usuariosHoy.size;
 
+            // Si no hay registros de asistencia aún en la base de datos
             if (asistencias.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="4" class="py-6 text-center text-gray-400">No hay registros de asistencia aún.</td></tr>`;
+                tbody.innerHTML = `
+                    <tr><td colspan="4" class="py-6 text-center text-gray-400">No hay registros de asistencia en la base de datos.</td></tr>
+                `;
                 return;
             }
 
-            tbody.innerHTML = asistencias.map(a => `
-                <tr class="hover:bg-gray-50/80 transition-colors">
-                    <td class="py-4 px-6 font-medium text-gray-900">Personal Registrado</td>
-                    <td class="py-4 px-6 font-mono text-xs">${a.numero_control || 'N/A'}</td>
-                    <td class="py-4 px-6 font-mono text-xs">${new Date(a.fecha_hora).toLocaleString()}</td>
-                    <td class="py-4 px-6">
-                        <span class="bg-emerald-50 text-emerald-600 text-xs px-2.5 py-1 rounded-full font-medium inline-block">Registrado</span>
-                    </td>
-                </tr>
-            `).join('');
+            // Construir las filas HTML dinámicamente
+            tbody.innerHTML = asistencias.map(a => {
+                const nombreCompleto = `${a.nombre} ${a.apellido_paterno} ${a.apellido_materno || ''}`.trim();
+                const fechaFormateada = new Date(a.fecha_hora).toLocaleString('es-MX', {
+                    year: 'numeric', month: 'short', day: 'numeric',
+                    hour: '2-digit', minute: '2-digit', second: '2-digit'
+                });
+
+                return `
+                    <tr class="hover:bg-gray-50/80 transition-colors">
+                        <td class="py-4 px-6 font-medium text-gray-900 flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">
+                                ${a.nombre.substring(0, 1)}${a.apellido_paterno.substring(0, 1)}
+                            </div>
+                            <span class="font-semibold text-gray-900">${nombreCompleto}</span>
+                        </td>
+                        <td class="py-4 px-6 font-mono text-xs text-gray-600">${a.numero_control}</td>
+                        <td class="py-4 px-6 font-mono text-xs text-gray-600">${fechaFormateada}</td>
+                        <td class="py-4 px-6">
+                            <span class="bg-emerald-50 text-emerald-600 text-xs px-2.5 py-1 rounded-full font-medium inline-block">Registrado</span>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
         }
 
-        // Alta de usuario desde modal
+        // 4. Modal para dar de alta a nuevos integrantes
         document.getElementById('form-nuevo-usuario').addEventListener('submit', async (e) => {
             e.preventDefault();
             const msgError = document.getElementById('msg-error-modal');
@@ -244,8 +282,12 @@
             const payload = {
                 numeroControl: document.getElementById('nuevo-nc').value,
                 nombre: document.getElementById('nuevo-nombre').value,
+                apellidoPaterno: document.getElementById('nuevo-paterno').value,
+                apellidoMaterno: document.getElementById('nuevo-materno').value,
                 email: document.getElementById('nuevo-email').value,
-                password: document.getElementById('nuevo-password').value
+                password: document.getElementById('nuevo-password').value,
+                semestreNumero: parseInt(document.getElementById('nuevo-semestre').value) || null,
+                periodoServicio: document.getElementById('nuevo-periodo').value || null
             };
 
             try {
@@ -261,11 +303,11 @@
                 const data = await res.json();
 
                 if (res.ok) {
-                    alert("¡Usuario registrado exitosamente!");
+                    alert("¡Usuario registrado correctamente!");
                     cerrarModalUsuario();
                     cargarDashboard();
                 } else {
-                    msgError.innerText = data.mensaje || "Error al registrar";
+                    msgError.innerText = data.mensaje || "Error al registrar usuario";
                     msgError.classList.remove('hidden');
                 }
             } catch (err) {
@@ -276,7 +318,7 @@
 
         function abrirModalUsuario() { document.getElementById('modal-usuario').classList.remove('hidden'); }
         function cerrarModalUsuario() { document.getElementById('modal-usuario').classList.add('hidden'); }
-        
+
         function cerrarSesion() {
             localStorage.removeItem('jwt_token');
             localStorage.removeItem('usuario_info');
@@ -292,6 +334,7 @@
             });
         }
 
+        // Cargar el dashboard al abrir la página
         cargarDashboard();
     </script>
 </body>
