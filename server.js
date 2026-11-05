@@ -1,251 +1,239 @@
-// ===================================================================
-// SERVIDOR PRINCIPAL (server.js) - CONTROL DE ASISTENCIA SS
-// ===================================================================
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor de Asistencia - Servicio Social</title>
+    <!-- Tailwind CSS desde CDN para diseño moderno -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Generador de Código QR nativo en cliente -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- Librería de Íconos Lucide -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-slate-900 text-white min-h-screen flex flex-col justify-between items-center p-6 font-sans">
 
-const express = require('express');
-const cors = require('cors');
-const path = require('path');
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
-const crypto = require('crypto');
-const db = require('./db');
-require('dotenv').config();
+    <!-- 1. VISTA DE INICIO DE SESIÓN (Se muestra si no hay token de sesión válido) -->
+    <div id="vista-login" class="w-full max-w-sm bg-slate-800 border border-slate-700 p-8 rounded-3xl shadow-2xl my-auto hidden">
+        <div class="text-center mb-6">
+            <div class="inline-flex items-center justify-center p-3 bg-blue-600 rounded-2xl mb-3 text-white">
+                <i data-lucide="monitor" class="w-8 h-8"></i>
+            </div>
+            <h2 class="text-xl font-bold">Acceso a Monitor</h2>
+            <p class="text-xs text-slate-400 mt-1">Ingresa las credenciales de la cuenta DISPLAY para proyectar el QR.</p>
+        </div>
 
-const app = express();
+        <form id="form-login" class="space-y-4">
+            <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">Número de Control / Identificador</label>
+                <input type="text" id="input-usuario" required placeholder="Ej. MONITOR01" 
+                       class="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-blue-500">
+            </div>
 
-// Middlewares globales
-app.use(cors());
-app.use(express.json());
-// Servir la carpeta de archivos estáticos (HTML, CSS, JS)
-app.use(express.static(path.join(__dirname, 'public')));
+            <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">Contraseña</label>
+                <input type="password" id="input-password" required placeholder="••••••••" 
+                       class="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-blue-500">
+            </div>
 
-const JWT_SECRET = process.env.JWT_SECRET || 'secreto_asistencia_2026';
-const PORT = process.env.PORT || 3000;
+            <div id="error-login" class="text-xs text-rose-400 font-medium hidden"></div>
 
-// -------------------------------------------------------------------
-// MIDDLEWARES DE SEGURIDAD Y ROLES
-// -------------------------------------------------------------------
+            <button type="submit" class="w-full py-3 bg-blue-600 hover:bg-blue-700 font-semibold rounded-xl text-sm transition-all shadow-lg">
+                Iniciar Monitor
+            </button>
+        </form>
+    </div>
 
-// Verificar autenticación mediante token JWT
-function verificarToken(req, res, next) {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
 
-    if (!token) return res.status(401).json({ mensaje: "Acceso denegado: Token no proporcionado" });
+    <!-- 2. VISTA PRINCIPAL DEL MONITOR QR (Se activa tras iniciar sesión) -->
+    <div id="vista-monitor" class="w-full max-w-xl flex flex-col items-center my-auto hidden">
+        
+        <!-- Encabezado -->
+        <header class="text-center mb-6">
+            <div class="inline-flex items-center gap-2 bg-slate-800 border border-slate-700 px-4 py-2 rounded-full mb-3">
+                <i data-lucide="shield-check" class="w-5 h-5 text-emerald-400"></i>
+                <span class="text-xs font-semibold tracking-wider text-slate-300 uppercase">Estación de Registro Autorizada</span>
+            </div>
+            <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight">Escanea tu Código QR</h1>
+            <p class="text-slate-400 text-sm mt-1">Abre tu sesión de personal desde tu dispositivo móvil para registrar tu asistencia.</p>
+        </header>
 
-    jwt.verify(token, JWT_SECRET, (err, usuario) => {
-        if (err) return res.status(403).json({ mensaje: "Sesión inválida o expirada" });
-        req.usuario = usuario;
-        next();
-    });
-}
+        <!-- Contenedor del QR -->
+        <main class="w-full max-w-md bg-white text-slate-900 p-8 rounded-3xl shadow-2xl flex flex-col items-center border border-slate-100">
+            
+            <div class="p-4 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl mb-6">
+                <!-- Envoltorio donde la librería insertará el código QR en JS -->
+                <div id="qrcode-container" class="flex justify-center items-center w-[220px] h-[220px]"></div>
+            </div>
 
-// Verificar rol de Administrador
-function esAdmin(req, res, next) {
-    if (req.usuario && req.usuario.rol === 'ADMIN') {
-        next();
-    } else {
-        return res.status(403).json({ mensaje: "Acceso denegado: Requiere rol de Administrador" });
-    }
-}
+            <!-- Barra de Progreso de 10 segundos -->
+            <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden mb-3">
+                <div id="progress-bar" class="bg-blue-600 h-2.5 rounded-full w-full transition-all duration-1000 ease-linear"></div>
+            </div>
 
-// Verificar rol de Monitor o Administrador
-function esMonitorOAdmin(req, res, next) {
-    if (req.usuario && (req.usuario.rol === 'DISPLAY' || req.usuario.rol === 'ADMIN')) {
-        next();
-    } else {
-        return res.status(403).json({ mensaje: "Acceso denegado: Estación no autorizada" });
-    }
-}
+            <div class="flex items-center gap-2 text-xs text-slate-500 font-medium">
+                <i data-lucide="refresh-cw" class="w-3.5 h-3.5 animate-spin text-blue-600"></i>
+                <span>Actualización automática en <strong id="timer-text" class="text-slate-800">10</strong>s</span>
+            </div>
+        </main>
 
-// -------------------------------------------------------------------
-// RUTAS DE AUTENTICACIÓN Y SISTEMA
-// -------------------------------------------------------------------
+        <!-- Botón secundario para cerrar sesión de la pantalla -->
+        <button onclick="cerrarSesion()" class="mt-6 text-xs text-slate-500 hover:text-slate-300 transition-colors flex items-center gap-1">
+            <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
+            <span>Cerrar sesión de esta estación</span>
+        </button>
+    </div>
 
-// 1. Inicio de Sesión General (Admin, Monitor o Personal)
-app.post('/api/auth/login', async (req, res) => {
-    const { numeroControl, password } = req.body;
 
-    try {
-        const queryText = 'SELECT * FROM usuarios WHERE numero_control = $1 AND activo = TRUE';
-        const result = await db.query(queryText, [numeroControl]);
+    <!-- Pie de página -->
+    <footer class="text-slate-500 text-xs text-center mt-auto pt-4">
+        <p>Control de Asistencia • Servicio Social IT Puebla</p>
+    </footer>
 
-        if (result.rows.length === 0) {
-            return res.status(401).json({ mensaje: "Número de control o contraseña incorrectos" });
+
+    <!-- 3. LÓGICA DE PROGRAMACIÓN Y COMUNICACIÓN CON EL BACKEND -->
+    <script>
+        lucide.createIcons();
+
+        // Referencias a elementos del DOM
+        const vistaLogin = document.getElementById('vista-login');
+        const vistaMonitor = document.getElementById('vista-monitor');
+        const formLogin = document.getElementById('form-login');
+        const errorLogin = document.getElementById('error-login');
+
+        const progressBar = document.getElementById('progress-bar');
+        const timerText = document.getElementById('timer-text');
+
+        let qrcode = null;
+        let segundosRestantes = 10;
+        const totalTiempo = 10;
+        let intervaloTimer = null;
+
+        // Inicializador del objeto QR
+        function inicializarLibreriaQR() {
+            if (!qrcode) {
+                qrcode = new QRCode(document.getElementById("qrcode-container"), {
+                    width: 220,
+                    height: 220,
+                    colorDark: "#0f172a",
+                    colorLight: "#ffffff",
+                    correctLevel: QRCode.CorrectLevel.H
+                });
+            }
         }
 
-        const usuario = result.rows[0];
-        const passwordValida = await bcrypt.compare(password, usuario.password_hash);
+        // Petición HTTP al servidor para obtener el token QR de 10 segundos
+        async function obtenerNuevoQR() {
+            const tokenSesion = localStorage.getItem('display_jwt_token');
 
-        if (!passwordValida) {
-            return res.status(401).json({ mensaje: "Número de control o contraseña incorrectos" });
+            if (!tokenSesion) {
+                mostrarVistaLogin();
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/qr/generar', {
+                    headers: {
+                        'Authorization': 'Bearer ' + tokenSesion
+                    }
+                });
+
+                // Si las credenciales o el token no son válidos (no es rol DISPLAY o ADMIN)
+                if (response.status === 401 || response.status === 403) {
+                    localStorage.removeItem('display_jwt_token');
+                    mostrarVistaLogin();
+                    return;
+                }
+
+                const data = await response.json();
+
+                if (data.qrToken) {
+                    inicializarLibreriaQR();
+                    qrcode.clear();
+                    qrcode.makeCode(data.qrToken);
+                }
+            } catch (error) {
+                console.error("Error al conectar con el servidor backend:", error);
+            }
         }
 
-        const token = jwt.sign(
-            { 
-                numeroControl: usuario.numero_control, 
-                nombre: usuario.nombre, 
-                rol: usuario.rol 
-            },
-            JWT_SECRET,
-            { expiresIn: '8h' }
-        );
+        // Iniciar el temporizador en bucle
+        function arrancarCicloQR() {
+            if (intervaloTimer) clearInterval(intervaloTimer);
+            
+            segundosRestantes = totalTiempo;
+            obtenerNuevoQR();
 
-        res.json({
-            token,
-            usuario: {
-                numeroControl: usuario.numero_control,
-                nombre: usuario.nombre,
-                apellidoPaterno: usuario.apellido_paterno,
-                rol: usuario.rol
+            intervaloTimer = setInterval(() => {
+                segundosRestantes--;
+
+                if (segundosRestantes <= 0) {
+                    segundosRestantes = totalTiempo;
+                    obtenerNuevoQR();
+                }
+
+                timerText.innerText = segundosRestantes;
+                const porcentaje = (segundosRestantes / totalTiempo) * 100;
+                progressBar.style.width = `${porcentaje}%`;
+            }, 1000);
+        }
+
+        // Control de vistas del DOM
+        function mostrarVistaMonitor() {
+            vistaLogin.classList.add('hidden');
+            vistaMonitor.classList.remove('hidden');
+            arrancarCicloQR();
+        }
+
+        function mostrarVistaLogin() {
+            if (intervaloTimer) clearInterval(intervaloTimer);
+            vistaMonitor.classList.add('hidden');
+            vistaLogin.classList.remove('hidden');
+        }
+
+        // Evento de Inicio de Sesión
+        formLogin.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errorLogin.classList.add('hidden');
+
+            const numeroControl = document.getElementById('input-usuario').value;
+            const password = document.getElementById('input-password').value;
+
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ numeroControl, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.token) {
+                    // Guardar token JWT localmente en el navegador de la recepción
+                    localStorage.setItem('display_jwt_token', data.token);
+                    mostrarVistaMonitor();
+                } else {
+                    errorLogin.innerText = data.mensaje || "Credenciales incorrectas";
+                    errorLogin.classList.remove('hidden');
+                }
+            } catch (err) {
+                errorLogin.innerText = "Error de conexión con el servidor";
+                errorLogin.classList.remove('hidden');
             }
         });
-    } catch (error) {
-        console.error("Error en login:", error);
-        res.status(500).json({ mensaje: "Error interno en el servidor" });
-    }
-});
 
-// 2. Generación del QR Dinámico (10 segundos de vigencia)
-app.get('/api/qr/generar', verificarToken, esMonitorOAdmin, (req, res) => {
-    const nonce = crypto.randomBytes(16).toString('hex');
-    const qrToken = jwt.sign({ nonce }, JWT_SECRET, { expiresIn: '10s' });
-    res.json({ qrToken });
-});
+        <!-- Botón secundario para cerrar sesión en la pantalla del monitor -->
+<button onclick="cerrarSesion()" class="mt-6 text-xs text-slate-500 hover:text-slate-300 transition-colors flex items-center gap-1">
+    <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
+    <span>Cerrar sesión de esta estación</span>
+</button>
 
-// 3. Registrar Asistencia (Escaneo desde el móvil del Personal)
-app.post('/api/asistencia/registrar', verificarToken, async (req, res) => {
-    const { qrToken } = req.body;
-    const numeroControl = req.usuario.numeroControl;
-
-    if (!qrToken) return res.status(400).json({ mensaje: "Código QR no enviado" });
-
-    try {
-        // Validar vigencia de 10 segundos
-        const decoded = jwt.verify(qrToken, JWT_SECRET);
-
-        // Verificar si el QR ya se utilizó
-        const checkQr = await db.query('SELECT token FROM qr_tokens_usados WHERE token = $1', [decoded.nonce]);
-        if (checkQr.rows.length > 0) {
-            return res.status(400).json({ mensaje: "Este código QR ya fue utilizado por otra persona." });
+        // Verificación inicial de sesión al cargar la página
+        if (localStorage.getItem('display_jwt_token')) {
+            mostrarVistaMonitor();
+        } else {
+            mostrarVistaLogin();
         }
-
-        // Marcar el token como consumido
-        await db.query('INSERT INTO qr_tokens_usados (token) VALUES ($1)', [decoded.nonce]);
-
-        // Registrar asistencia en PostgreSQL
-        const insertQuery = `
-            INSERT INTO asistencias (numero_control, fecha_hora) 
-            VALUES ($1, CURRENT_TIMESTAMP) 
-            RETURNING id, fecha_hora;
-        `;
-        const result = await db.query(insertQuery, [numeroControl]);
-
-        res.status(201).json({
-            exito: true,
-            mensaje: "Asistencia registrada correctamente",
-            registro: result.rows[0]
-        });
-
-    } catch (error) {
-        if (error.name === 'TokenExpiredError') {
-            return res.status(400).json({ mensaje: "El código QR ha expirado. Por favor escanea el nuevo código en pantalla." });
-        }
-        res.status(500).json({ mensaje: "Error al procesar el registro de asistencia" });
-    }
-});
-
-// 4. Mis Reportes (Para la app móvil del Personal - Solo Lectura)
-app.get('/api/asistencia/mis-reportes', verificarToken, async (req, res) => {
-    const numeroControl = req.usuario.numeroControl;
-
-    try {
-        const queryText = `
-            SELECT id, fecha_hora 
-            FROM asistencias 
-            WHERE numero_control = $1 
-            ORDER BY fecha_hora DESC;
-        `;
-        const result = await db.query(queryText, [numeroControl]);
-        res.json({ asistencias: result.rows });
-    } catch (error) {
-        res.status(500).json({ mensaje: "Error al obtener historial" });
-    }
-});
-
-// 5. Historial Global (Para el Dashboard del Administrador)
-app.get('/api/admin/asistencias', verificarToken, esAdmin, async (req, res) => {
-    try {
-        const queryText = `
-            SELECT 
-                a.id,
-                a.fecha_hora,
-                u.numero_control,
-                u.nombre,
-                u.apellido_paterno,
-                u.apellido_materno
-            FROM asistencias a
-            INNER JOIN usuarios u ON a.numero_control = u.numero_control
-            ORDER BY a.fecha_hora DESC;
-        `;
-        const result = await db.query(queryText);
-
-        const totalUsuarios = await db.query(
-            "SELECT COUNT(*) FROM usuarios WHERE rol = 'PERSONAL' AND activo = TRUE"
-        );
-
-        res.json({
-            exito: true,
-            totalPersonal: parseInt(totalUsuarios.rows[0].count),
-            asistencias: result.rows
-        });
-    } catch (error) {
-        res.status(500).json({ mensaje: "Error al consultar asistencias globales" });
-    }
-});
-
-// 6. Registrar nuevo integrante (Alta desde el Administrador)
-app.post('/api/admin/usuarios', verificarToken, esAdmin, async (req, res) => {
-    const { 
-        numeroControl, nombre, apellidoPaterno, apellidoMaterno, 
-        email, password, semestreNumero, periodoServicio 
-    } = req.body;
-
-    if (!numeroControl || !nombre || !apellidoPaterno || !email || !password) {
-        return res.status(400).json({ mensaje: "Por favor completa los campos obligatorios." });
-    }
-
-    try {
-        const passwordHash = await bcrypt.hash(password, 10);
-        const queryText = `
-            INSERT INTO usuarios (
-                numero_control, nombre, apellido_paterno, apellido_materno, 
-                email, password_hash, semestre_numero, periodo_servicio, rol, activo
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'PERSONAL', TRUE)
-            RETURNING numero_control, nombre, apellido_paterno, email;
-        `;
-
-        const result = await db.query(queryText, [
-            numeroControl, nombre, apellidoPaterno, apellidoMaterno || null,
-            email, passwordHash, semestreNumero || null, periodoServicio || null
-        ]);
-
-        res.status(201).json({ mensaje: "Usuario registrado correctamente", usuario: result.rows[0] });
-    } catch (error) {
-        if (error.code === '23505') {
-            return res.status(400).json({ mensaje: "El Número de Control o Correo ya existe en la base de datos." });
-        }
-        res.status(500).json({ mensaje: "Error al dar de alta al usuario" });
-    }
-});
-
-// 7. Ruta raíz por defecto
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// Arrancar Servidor
-app.listen(PORT, () => {
-    console.log(`Servidor de asistencia ejecutándose en el puerto ${PORT}`);
-});
+    </script>
+</body>
+</html>
