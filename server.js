@@ -134,6 +134,11 @@ app.post('/api/asistencia/registrar', verificarToken, async (req, res) => {
     }
 });
 
+// Redirigir la ruta raíz a la página de inicio de sesión
+app.get('/', (req, res) => {
+    res.redirect('/login.html');
+});
+
 // Arrancar Servidor
 app.listen(PORT, () => {
     console.log(`Servidor ejecutándose en el puerto ${PORT}`);
