@@ -139,37 +139,35 @@
             document.getElementById('user-avatar').innerText = usuario.nombre.substring(0, 2).toUpperCase();
         }
 
-        // Registrar asistencia enviando el token QR leído por la cámara
-        async function registrarAsistencia(qrToken) {
-            const msgBox = document.getElementById('mensaje-resultado');
-            msgBox.classList.remove('hidden');
-            msgBox.className = "mt-4 p-3 rounded-xl text-xs font-semibold bg-gray-100 text-gray-600";
-            msgBox.innerText = "Procesando código...";
+            // Función para enviar el token QR escaneado al backend
+async function enviarEscaneoQR(qrToken) {
+    try {
+        const response = await fetch('/api/asistencia/registrar', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + localStorage.getItem('jwt_token')
+            },
+            body: JSON.stringify({ qrToken })
+        });
 
-            try {
-                const res = await fetch('/api/asistencia/registrar', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + token
-                    },
-                    body: JSON.stringify({ qrToken })
-                });
+        const data = await response.json();
 
-                const data = await res.json();
-
-                if (res.ok && data.exito) {
-                    msgBox.className = "mt-4 p-3 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200";
-                    msgBox.innerText = "¡Asistencia registrada correctamente! (" + new Date(data.registro.fecha_hora).toLocaleTimeString() + ")";
-                } else {
-                    msgBox.className = "mt-4 p-3 rounded-xl text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200";
-                    msgBox.innerText = data.mensaje || "Error al registrar la asistencia";
-                }
-            } catch (err) {
-                msgBox.className = "mt-4 p-3 rounded-xl text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200";
-                msgBox.innerText = "Error de conexión con el servidor";
+        if (response.ok && data.exito) {
+            // Mostrar notificación con el resultado automático y las horas acumuladas
+            alert(data.mensaje);
+            // Recargar la tabla local de reportes del alumno
+            if (typeof cargarMisReportes === 'function') {
+                cargarMisReportes();
             }
+        } else {
+            alert(data.mensaje || "Error al registrar la asistencia.");
         }
+    } catch (error) {
+        console.error("Error en la petición de asistencia:", error);
+        alert("Error de conexión con el servidor.");
+    }
+}
 
         // Cargar historial de reportes del propio usuario
         async function cargarMisReportes() {
