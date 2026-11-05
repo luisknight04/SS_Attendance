@@ -1,4 +1,7 @@
-// server.js - Servidor Node.js / Express adaptado para Render
+// ===================================================================
+// SERVIDOR PRINCIPAL (server.js) - CONTROL DE ASISTENCIA SS
+// ===================================================================
+
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -10,16 +13,20 @@ require('dotenv').config();
 
 const app = express();
 
-// Middlewares
+// Middlewares globales
 app.use(cors());
 app.use(express.json());
+// Servir la carpeta de archivos estáticos (HTML, CSS, JS)
 app.use(express.static(path.join(__dirname, 'public')));
 
-const JWT_SECRET = process.env.JWT_SECRET || 'secreto_por_defecto';
-// Render asigna dinámicamente un puerto en process.env.PORT
+const JWT_SECRET = process.env.JWT_SECRET || 'secreto_asistencia_2026';
 const PORT = process.env.PORT || 3000;
 
-// Middleware de Autenticación
+// -------------------------------------------------------------------
+// MIDDLEWARES DE SEGURIDAD Y ROLES
+// -------------------------------------------------------------------
+
+// Verificar autenticación mediante token JWT
 function verificarToken(req, res, next) {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -27,13 +34,13 @@ function verificarToken(req, res, next) {
     if (!token) return res.status(401).json({ mensaje: "Acceso denegado: Token no proporcionado" });
 
     jwt.verify(token, JWT_SECRET, (err, usuario) => {
-        if (err) return res.status(403).json({ mensaje: "Token inválido o expirado" });
+        if (err) return res.status(403).json({ mensaje: "Sesión inválida o expirada" });
         req.usuario = usuario;
         next();
     });
 }
 
-// Middleware de Verificación de Administrador
+// Verificar rol de Administrador
 function esAdmin(req, res, next) {
     if (req.usuario && req.usuario.rol === 'ADMIN') {
         next();
@@ -42,11 +49,20 @@ function esAdmin(req, res, next) {
     }
 }
 
+// Verificar rol de Monitor o Administrador
+function esMonitorOAdmin(req, res, next) {
+    if (req.usuario && (req.usuario.rol === 'DISPLAY' || req.usuario.rol === 'ADMIN')) {
+        next();
+    } else {
+        return res.status(403).json({ mensaje: "Acceso denegado: Estación no autorizada" });
+    }
+}
+
 // -------------------------------------------------------------------
-// RUTAS DE LA APLICACIÓN
+// RUTAS DE AUTENTICACIÓN Y SISTEMA
 // -------------------------------------------------------------------
 
-// 1. Inicio de Sesión (Usa Número de Control)
+// 1. Inicio de Sesión General (Admin, Monitor o Personal)
 app.post('/api/auth/login', async (req, res) => {
     const { numeroControl, password } = req.body;
 
@@ -66,7 +82,11 @@ app.post('/api/auth/login', async (req, res) => {
         }
 
         const token = jwt.sign(
-            { numeroControl: usuario.numero_control, nombre: usuario.nombre, rol: usuario.rol },
+            { 
+                numeroControl: usuario.numero_control, 
+                nombre: usuario.nombre, 
+                rol: usuario.rol 
+            },
             JWT_SECRET,
             { expiresIn: '8h' }
         );
@@ -76,53 +96,54 @@ app.post('/api/auth/login', async (req, res) => {
             usuario: {
                 numeroControl: usuario.numero_control,
                 nombre: usuario.nombre,
+                apellidoPaterno: usuario.apellido_paterno,
                 rol: usuario.rol
             }
         });
     } catch (error) {
-        res.status(500).json({ mensaje: "Error en el servidor", error: error.message });
+        console.error("Error en login:", error);
+        res.status(500).json({ mensaje: "Error interno en el servidor" });
     }
 });
 
-// 2. Generación del QR Dinámico (Para la pantalla del monitor)
-app.get('/api/qr/generar', (req, res) => {
+// 2. Generación del QR Dinámico (10 segundos de vigencia)
+app.get('/api/qr/generar', verificarToken, esMonitorOAdmin, (req, res) => {
     const nonce = crypto.randomBytes(16).toString('hex');
-    // Generar token que expira en 10 segundos
     const qrToken = jwt.sign({ nonce }, JWT_SECRET, { expiresIn: '10s' });
     res.json({ qrToken });
 });
 
-// 3. Registro de Asistencia mediante QR (Desde el móvil del personal)
+// 3. Registrar Asistencia (Escaneo desde el móvil del Personal)
 app.post('/api/asistencia/registrar', verificarToken, async (req, res) => {
     const { qrToken } = req.body;
     const numeroControl = req.usuario.numeroControl;
 
-    if (!qrToken) return res.status(400).json({ mensaje: "Token QR no enviado" });
+    if (!qrToken) return res.status(400).json({ mensaje: "Código QR no enviado" });
 
     try {
-        // Validar vigencia de 10 segundos del QR
+        // Validar vigencia de 10 segundos
         const decoded = jwt.verify(qrToken, JWT_SECRET);
 
-        // Validar si el QR ya fue consumido por alguien más
+        // Verificar si el QR ya se utilizó
         const checkQr = await db.query('SELECT token FROM qr_tokens_usados WHERE token = $1', [decoded.nonce]);
         if (checkQr.rows.length > 0) {
-            return res.status(400).json({ mensaje: "Este código QR ya ha sido utilizado." });
+            return res.status(400).json({ mensaje: "Este código QR ya fue utilizado por otra persona." });
         }
 
-        // Marcar el QR como usado
+        // Marcar el token como consumido
         await db.query('INSERT INTO qr_tokens_usados (token) VALUES ($1)', [decoded.nonce]);
 
-        // Registrar marcaje en asistencias
-        const insertAsistencia = `
+        // Registrar asistencia en PostgreSQL
+        const insertQuery = `
             INSERT INTO asistencias (numero_control, fecha_hora) 
             VALUES ($1, CURRENT_TIMESTAMP) 
             RETURNING id, fecha_hora;
         `;
-        const result = await db.query(insertAsistencia, [numeroControl]);
+        const result = await db.query(insertQuery, [numeroControl]);
 
         res.status(201).json({
             exito: true,
-            mensaje: "Asistencia registrada exitosamente",
+            mensaje: "Asistencia registrada correctamente",
             registro: result.rows[0]
         });
 
@@ -130,14 +151,31 @@ app.post('/api/asistencia/registrar', verificarToken, async (req, res) => {
         if (error.name === 'TokenExpiredError') {
             return res.status(400).json({ mensaje: "El código QR ha expirado. Por favor escanea el nuevo código en pantalla." });
         }
-        res.status(500).json({ mensaje: "Error al procesar el registro", error: error.message });
+        res.status(500).json({ mensaje: "Error al procesar el registro de asistencia" });
     }
 });
 
-// Endpoint exclusivo para ADMINISTRADOR: Obtener el historial completo de asistencias
+// 4. Mis Reportes (Para la app móvil del Personal - Solo Lectura)
+app.get('/api/asistencia/mis-reportes', verificarToken, async (req, res) => {
+    const numeroControl = req.usuario.numeroControl;
+
+    try {
+        const queryText = `
+            SELECT id, fecha_hora 
+            FROM asistencias 
+            WHERE numero_control = $1 
+            ORDER BY fecha_hora DESC;
+        `;
+        const result = await db.query(queryText, [numeroControl]);
+        res.json({ asistencias: result.rows });
+    } catch (error) {
+        res.status(500).json({ mensaje: "Error al obtener historial" });
+    }
+});
+
+// 5. Historial Global (Para el Dashboard del Administrador)
 app.get('/api/admin/asistencias', verificarToken, esAdmin, async (req, res) => {
     try {
-        // Consulta SQL con INNER JOIN para traer los nombres completos del personal
         const queryText = `
             SELECT 
                 a.id,
@@ -150,31 +188,64 @@ app.get('/api/admin/asistencias', verificarToken, esAdmin, async (req, res) => {
             INNER JOIN usuarios u ON a.numero_control = u.numero_control
             ORDER BY a.fecha_hora DESC;
         `;
-        
         const result = await db.query(queryText);
-        
-        // Obtener el total de usuarios con rol PERSONAL registrados
-        const totalUsuariosResult = await db.query(
+
+        const totalUsuarios = await db.query(
             "SELECT COUNT(*) FROM usuarios WHERE rol = 'PERSONAL' AND activo = TRUE"
         );
 
         res.json({
             exito: true,
-            totalPersonal: parseInt(totalUsuariosResult.rows[0].count),
+            totalPersonal: parseInt(totalUsuarios.rows[0].count),
             asistencias: result.rows
         });
     } catch (error) {
-        console.error("Error al consultar asistencias globales:", error);
-        res.status(500).json({ mensaje: "Error interno al obtener reportes globales" });
+        res.status(500).json({ mensaje: "Error al consultar asistencias globales" });
     }
 });
 
-// Redirigir la ruta raíz a la página de inicio de sesión
+// 6. Registrar nuevo integrante (Alta desde el Administrador)
+app.post('/api/admin/usuarios', verificarToken, esAdmin, async (req, res) => {
+    const { 
+        numeroControl, nombre, apellidoPaterno, apellidoMaterno, 
+        email, password, semestreNumero, periodoServicio 
+    } = req.body;
+
+    if (!numeroControl || !nombre || !apellidoPaterno || !email || !password) {
+        return res.status(400).json({ mensaje: "Por favor completa los campos obligatorios." });
+    }
+
+    try {
+        const passwordHash = await bcrypt.hash(password, 10);
+        const queryText = `
+            INSERT INTO usuarios (
+                numero_control, nombre, apellido_paterno, apellido_materno, 
+                email, password_hash, semestre_numero, periodo_servicio, rol, activo
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'PERSONAL', TRUE)
+            RETURNING numero_control, nombre, apellido_paterno, email;
+        `;
+
+        const result = await db.query(queryText, [
+            numeroControl, nombre, apellidoPaterno, apellidoMaterno || null,
+            email, passwordHash, semestreNumero || null, periodoServicio || null
+        ]);
+
+        res.status(201).json({ mensaje: "Usuario registrado correctamente", usuario: result.rows[0] });
+    } catch (error) {
+        if (error.code === '23505') {
+            return res.status(400).json({ mensaje: "El Número de Control o Correo ya existe en la base de datos." });
+        }
+        res.status(500).json({ mensaje: "Error al dar de alta al usuario" });
+    }
+});
+
+// 7. Ruta raíz por defecto
 app.get('/', (req, res) => {
-    res.redirect('/login.html');
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // Arrancar Servidor
 app.listen(PORT, () => {
-    console.log(`Servidor ejecutándose en el puerto ${PORT}`);
+    console.log(`Servidor de asistencia ejecutándose en el puerto ${PORT}`);
 });
