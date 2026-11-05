@@ -134,6 +134,41 @@ app.post('/api/asistencia/registrar', verificarToken, async (req, res) => {
     }
 });
 
+// Endpoint exclusivo para ADMINISTRADOR: Obtener el historial completo de asistencias
+app.get('/api/admin/asistencias', verificarToken, esAdmin, async (req, res) => {
+    try {
+        // Consulta SQL con INNER JOIN para traer los nombres completos del personal
+        const queryText = `
+            SELECT 
+                a.id,
+                a.fecha_hora,
+                u.numero_control,
+                u.nombre,
+                u.apellido_paterno,
+                u.apellido_materno
+            FROM asistencias a
+            INNER JOIN usuarios u ON a.numero_control = u.numero_control
+            ORDER BY a.fecha_hora DESC;
+        `;
+        
+        const result = await db.query(queryText);
+        
+        // Obtener el total de usuarios con rol PERSONAL registrados
+        const totalUsuariosResult = await db.query(
+            "SELECT COUNT(*) FROM usuarios WHERE rol = 'PERSONAL' AND activo = TRUE"
+        );
+
+        res.json({
+            exito: true,
+            totalPersonal: parseInt(totalUsuariosResult.rows[0].count),
+            asistencias: result.rows
+        });
+    } catch (error) {
+        console.error("Error al consultar asistencias globales:", error);
+        res.status(500).json({ mensaje: "Error interno al obtener reportes globales" });
+    }
+});
+
 // Redirigir la ruta raíz a la página de inicio de sesión
 app.get('/', (req, res) => {
     res.redirect('/login.html');
