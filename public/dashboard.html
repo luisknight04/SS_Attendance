@@ -412,6 +412,220 @@ async function consultarExpedienteAlumno(numeroControl) {
         console.error("Error al consultar el expediente:", error);
     }
 }
+
+// Variable global para almacenar el alumno seleccionado actualmente
+let alumnoSeleccionadoNC = null;
+
+// 1. Cargar las opciones de los catálogos en los elementos <select>
+async function cargarCatalogos() {
+    try {
+        const response = await fetch('/api/catalogos', {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await response.json();
+
+        if (data.exito) {
+            // Llenar selector de Carreras
+            const selectCarrera = document.getElementById('edit-carrera');
+            selectCarrera.innerHTML = '<option value="">Selecciona Carrera</option>' + 
+                data.carreras.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
+
+            // Llenar selector de Semestres
+            const selectSemestre = document.getElementById('edit-semestre');
+            selectSemestre.innerHTML = '<option value="">Selecciona Semestre</option>' + 
+                data.semestres.map(s => `<option value="${s.id}">Semestre ${s.numero}</option>`).join('');
+
+            // Llenar selector de Periodos
+            const selectPeriodo = document.getElementById('edit-periodo');
+            selectPeriodo.innerHTML = '<option value="">Selecciona Periodo</option>' + 
+                data.periodos.map(p => `<option value="${p.id}">${p.nombre}</option>`).join('');
+        }
+    } catch (error) {
+        console.error("Error al cargar los catálogos:", error);
+    }
+}
+
+// 2. Abrir el modal de expediente del perfil y cargar sus métricas
+async function abrirPerfilAlumno(numeroControl) {
+    alumnoSeleccionadoNC = numeroControl;
+    await cargarCatalogos();
+
+    try {
+        const response = await fetch(`/api/admin/usuarios/${numeroControl}/perfil`, {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+
+        const data = await response.json();
+
+        if (data.exito) {
+            const p = data.perfil;
+            const m = data.metricas;
+
+            // Llenar Encabezado
+            document.getElementById('modal-nombre-alumno').innerText = `${p.nombre} ${p.apellido_paterno} ${p.apellido_materno || ''}`.trim();
+            document.getElementById('modal-nc-alumno').innerText = "NC: " + p.numero_control;
+
+            // Llenar Tarjetas de Métricas
+            document.getElementById('metric-porcentaje').innerText = `${m.porcentajeAvance}%`;
+            document.getElementById('metric-horas').innerText = `${m.horasAcumuladas}h ${m.minutosAcumulados}m`;
+            document.getElementById('metric-dias').innerText = `${m.diasAsistidos} días`;
+
+            // Llenar Campos del Formulario
+            document.getElementById('edit-nombre').value = p.nombre || '';
+            document.getElementById('edit-paterno').value = p.apellido_paterno || '';
+            document.getElementById('edit-materno').value = p.apellido_materno || '';
+            document.getElementById('edit-email').value = p.email || '';
+            document.getElementById('edit-carrera').value = p.carrera_id || '';
+            document.getElementById('edit-semestre').value = p.semestre_id || '';
+            document.getElementById('edit-periodo').value = p.periodo_id || '';
+            document.getElementById('edit-pin').value = '';
+
+            // Mostrar el Modal
+            document.getElementById('modal-perfil-alumno').classList.remove('hidden');
+        } else {
+            alert(data.mensaje || "Error al cargar la información del integrante.");
+        }
+    } catch (error) {
+        console.error("Error al obtener expediente:", error);
+    }
+}
+
+function cerrarModalPerfil() {
+    document.getElementById('modal-perfil-alumno').classList.add('hidden');
+}
+
+// 3. Enviar la actualización del perfil con la clave de seguridad
+document.getElementById('form-editar-perfil').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const payload = {
+        nombre: document.getElementById('edit-nombre').value,
+        apellidoPaterno: document.getElementById('edit-paterno').value,
+        apellidoMaterno: document.getElementById('edit-materno').value,
+        email: document.getElementById('edit-email').value,
+        carreraId: document.getElementById('edit-carrera').value || null,
+        semestreId: document.getElementById('edit-semestre').value || null,
+        periodoId: document.getElementById('edit-periodo').value || null,
+        pinEdicion: document.getElementById('edit-pin').value
+    };
+
+    try {
+        const response = await fetch(`/api/admin/usuarios/${alumnoSeleccionadoNC}/editar`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.exito) {
+            alert("¡Perfil actualizado con éxito!");
+            cerrarModalPerfil();
+            if (typeof cargarIntegrantes === 'function') cargarIntegrantes();
+        } else {
+            alert(data.mensaje || "Error al autorizar los cambios.");
+        }
+    } catch (error) {
+        console.error("Error al enviar formulario de edición:", error);
+        alert("Error de conexión con el servidor.");
+    }
+});
     </script>
+    <!-- MODAL DE PERFIL Y EDICIÓN DE INTEGRANTE -->
+<div id="modal-perfil-alumno" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 hidden z-50">
+    <div class="bg-white rounded-3xl p-6 w-full max-w-xl shadow-2xl overflow-y-auto max-h-[90vh]">
+        
+        <!-- Encabezado del Modal -->
+        <div class="flex justify-between items-start border-b border-gray-100 pb-4 mb-4">
+            <div>
+                <h3 id="modal-nombre-alumno" class="font-bold text-gray-900 text-lg">Cargando integrante...</h3>
+                <p id="modal-nc-alumno" class="text-xs text-gray-400 font-mono">NC: ----</p>
+            </div>
+            <button onclick="cerrarModalPerfil()" class="text-gray-400 hover:text-gray-600 p-1 rounded-xl">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+
+        <!-- Tarjetas de Métricas de Progreso -->
+        <div class="grid grid-cols-3 gap-3 mb-6">
+            <div class="bg-blue-50/80 p-3 rounded-2xl border border-blue-100 text-center">
+                <p class="text-[10px] uppercase font-bold text-blue-600">Avance Total</p>
+                <p id="metric-porcentaje" class="text-lg font-extrabold text-blue-900 mt-0.5">0%</p>
+            </div>
+            <div class="bg-emerald-50/80 p-3 rounded-2xl border border-emerald-100 text-center">
+                <p class="text-[10px] uppercase font-bold text-emerald-600">Horas Acumuladas</p>
+                <p id="metric-horas" class="text-lg font-extrabold text-emerald-900 mt-0.5">0h 0m</p>
+            </div>
+            <div class="bg-purple-50/80 p-3 rounded-2xl border border-purple-100 text-center">
+                <p class="text-[10px] uppercase font-bold text-purple-600">Días Asistidos</p>
+                <p id="metric-dias" class="text-lg font-extrabold text-purple-900 mt-0.5">0 días</p>
+            </div>
+        </div>
+
+        <!-- Formulario de Edición de Datos Académicos -->
+        <form id="form-editar-perfil" class="space-y-4">
+            <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Datos Académicos y Personales</h4>
+            
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Nombre(s)</label>
+                    <input type="text" id="edit-nombre" required class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-blue-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Apellido Paterno</label>
+                    <input type="text" id="edit-paterno" required class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-blue-500">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Apellido Materno</label>
+                    <input type="text" id="edit-materno" class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-blue-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Correo Electrónico</label>
+                    <input type="email" id="edit-email" required class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-blue-500">
+                </div>
+            </div>
+
+            <!-- Listas desplegables desde catálogos normalizados -->
+            <div class="grid grid-cols-3 gap-3">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Carrera</label>
+                    <select id="edit-carrera" class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-blue-500">
+                        <option value="">Cargando...</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Semestre</label>
+                    <select id="edit-semestre" class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-blue-500">
+                        <option value="">Cargando...</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Periodo</label>
+                    <select id="edit-periodo" class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-blue-500">
+                        <option value="">Cargando...</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Campo de PIN de Edición -->
+            <div class="pt-2 border-t border-gray-100">
+                <label class="block text-xs font-bold text-rose-600 mb-1">PIN de Seguridad para Autorizar Cambios</label>
+                <input type="password" id="edit-pin" placeholder="Ingresa la clave secundaria" required class="w-full px-3 py-2 bg-rose-50/50 border border-rose-200 rounded-xl text-xs focus:outline-none focus:border-rose-500">
+            </div>
+
+            <div class="flex gap-2 pt-2">
+                <button type="button" onclick="cerrarModalPerfil()" class="w-1/2 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-xs font-semibold">Cancelar</button>
+                <button type="submit" class="w-1/2 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-semibold hover:bg-blue-700">Guardar Cambios</button>
+            </div>
+        </form>
+
+    </div>
+</div>
 </body>
 </html>
