@@ -363,10 +363,12 @@ app.get('/api/asistencia/mis-reportes', verificarToken, async (req, res) => {
 // 5. Historial Global (Para el Dashboard del Administrador)
 app.get('/api/admin/asistencias', verificarToken, esAdmin, async (req, res) => {
     try {
+        // Consulta SQL incluyendo la columna tipo_registro
         const queryText = `
             SELECT 
                 a.id,
                 a.fecha_hora,
+                a.tipo_registro,
                 u.numero_control,
                 u.nombre,
                 u.apellido_paterno,
@@ -375,19 +377,21 @@ app.get('/api/admin/asistencias', verificarToken, esAdmin, async (req, res) => {
             INNER JOIN usuarios u ON a.numero_control = u.numero_control
             ORDER BY a.fecha_hora DESC;
         `;
+        
         const result = await db.query(queryText);
-
-        const totalUsuarios = await db.query(
+        
+        const totalUsuariosResult = await db.query(
             "SELECT COUNT(*) FROM usuarios WHERE rol = 'PERSONAL' AND activo = TRUE"
         );
 
         res.json({
             exito: true,
-            totalPersonal: parseInt(totalUsuarios.rows[0].count),
+            totalPersonal: parseInt(totalUsuariosResult.rows[0].count),
             asistencias: result.rows
         });
     } catch (error) {
-        res.status(500).json({ mensaje: "Error al consultar asistencias globales" });
+        console.error("Error al consultar asistencias globales:", error);
+        res.status(500).json({ mensaje: "Error interno al obtener reportes globales" });
     }
 });
 
