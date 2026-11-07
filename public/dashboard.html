@@ -336,6 +336,71 @@
 
         // Cargar el dashboard al abrir la página
         cargarDashboard();
+
+        // 1. Cargar la lista de integrantes registrados en el panel
+async function cargarIntegrantes() {
+    try {
+        const response = await fetch('/api/admin/usuarios', {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+
+        const data = await response.json();
+        if (data.exito) {
+            console.log("Integrantes cargados:", data.usuarios);
+            // Aquí puedes llamar a tu función de renderizado de tabla de usuarios
+        }
+    } catch (error) {
+        console.error("Error al cargar la lista de integrantes:", error);
+    }
+}
+
+// 2. Cambiar el estatus (Activar/Desactivar) de una cuenta de alumno
+async function cambiarEstadoUsuario(numeroControl, nuevoEstado) {
+    const accion = nuevoEstado ? 'activar' : 'desactivar';
+    if (!confirm(`¿Estás seguro de que deseas ${accion} la cuenta ${numeroControl}?`)) return;
+
+    try {
+        const response = await fetch(`/api/admin/usuarios/${numeroControl}/estado`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify({ activo: nuevoEstado })
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+            alert(data.mensaje);
+            cargarIntegrantes(); // Recargar la lista actualizada
+        } else {
+            alert(data.mensaje || "No se pudo actualizar el estatus.");
+        }
+    } catch (error) {
+        console.error("Error al cambiar estatus:", error);
+    }
+}
+
+// 3. Consultar el resumen de horas acumuladas de un estudiante específico
+async function consultarExpedienteAlumno(numeroControl) {
+    try {
+        const response = await fetch(`/api/admin/usuarios/${numeroControl}/asistencias`, {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+
+        const data = await response.json();
+        if (data.exito) {
+            alert(
+                ` EXPEDIENTE DE INTEGRANTE\n` +
+                `Número de Control: ${data.numeroControl}\n` +
+                `Total Marcajes: ${data.totalAsistencias}\n` +
+                `Horas Totales Cumplidas: ${data.horasAcumuladas.horas}h ${data.horasAcumuladas.minutos}m`
+            );
+        }
+    } catch (error) {
+        console.error("Error al consultar el expediente:", error);
+    }
+}
     </script>
 </body>
 </html>
