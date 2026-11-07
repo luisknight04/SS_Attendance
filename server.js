@@ -19,6 +19,18 @@ app.use(express.json());
 // Servir la carpeta de archivos estáticos (HTML, CSS, JS)
 app.use(express.static(path.join(__dirname, 'public')));
 
+// ===================================================================
+// REDIRECCIÓN AUTOMÁTICA A LA PÁGINA DE LOGIN
+// ===================================================================
+
+// 1. Asegurar que Express sirva los archivos dentro de la carpeta 'public'
+app.use(express.static(path.join(__dirname, 'public')));
+
+// 2. Ruta raíz ('/'): Redirige automáticamente al usuario a login.html
+app.get('/', (req, res) => {
+    res.redirect('/login.html');
+});
+
 const JWT_SECRET = process.env.JWT_SECRET || 'secreto_asistencia_2026';
 const PORT = process.env.PORT || 3000;
 
