@@ -186,6 +186,199 @@ app.get('/api/admin/usuarios/:numeroControl/asistencias', verificarToken, esAdmi
     }
 });
 
+// ===================================================================
+// ENDPOINTS DE CATÁLOGOS Y GESTIÓN DE PERFILES NORMALIZADOS
+// ===================================================================
+
+// 1. Obtener los 3 catálogos para alimentar los dropdowns del frontend
+app.get('/api/catalogos', verificarToken, async (req, res) => {
+    try {
+        const carrerasRes = await db.query('SELECT id, nombre FROM catalogo_carreras ORDER BY nombre ASC');
+        const periodosRes = await db.query('SELECT id, nombre FROM catalogo_periodos ORDER BY id ASC');
+        const semestresRes = await db.query('SELECT id, numero FROM catalogo_semestre ORDER BY numero ASC');
+
+        res.json({
+            exito: true,
+            carreras: carrerasRes.rows,
+            periodos: periodosRes.rows,
+            semestres: semestresRes.rows
+        });
+    } catch (error) {
+        console.error("Error al obtener los catálogos:", error);
+        res.status(500).json({ mensaje: "Error interno al cargar los catálogos" });
+    }
+});
+
+// 2. Registrar un nuevo integrante del Servicio Social con llaves foráneas
+app.post('/api/admin/usuarios', verificarToken, esAdmin, async (req, res) => {
+    const { 
+        numeroControl, nombre, apellidoPaterno, apellidoMaterno, 
+        email, password, carreraId, semestreId, periodoId 
+    } = req.body;
+
+    if (!numeroControl || !nombre || !apellidoPaterno || !email || !password) {
+        return res.status(400).json({ mensaje: "Por favor completa todos los campos obligatorios." });
+    }
+
+    try {
+        const passwordHash = await bcrypt.hash(password, 10);
+        const queryText = `
+            INSERT INTO usuarios (
+                numero_control, nombre, apellido_paterno, apellido_materno, 
+                email, password_hash, carrera_id, semestre_id, periodo_id, rol, activo
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'PERSONAL', TRUE)
+            RETURNING numero_control, nombre, apellido_paterno, email;
+        `;
+
+        const result = await db.query(queryText, [
+            numeroControl, 
+            nombre, 
+            apellidoPaterno, 
+            apellidoMaterno || null,
+            email, 
+            passwordHash, 
+            carreraId || null, 
+            semestreId || null, 
+            periodoId || null
+        ]);
+
+        res.status(201).json({ 
+            exito: true, 
+            mensaje: "Integrante registrado correctamente en el sistema.", 
+            usuario: result.rows[0] 
+        });
+
+    } catch (error) {
+        console.error("Error al registrar usuario:", error);
+        if (error.code === '23505') {
+            return res.status(400).json({ mensaje: "El Número de Control o Correo Electrónico ya está registrado." });
+        }
+        res.status(500).json({ mensaje: "Error al registrar el usuario en la base de datos." });
+    }
+});
+
+// 3. Editar datos académicos y personales de un alumno (Protegido por PIN de Edición)
+app.put('/api/admin/usuarios/:numeroControl/editar', verificarToken, esAdmin, async (req, res) => {
+    const { numeroControl } = req.params;
+    const { 
+        nombre, apellidoPaterno, apellidoMaterno, 
+        email, carreraId, semestreId, periodoId, 
+        pinEdicion 
+    } = req.body;
+
+    // Validación de la contraseña secundaria de seguridad
+    if (pinEdicion !== process.env.PIN_EDICION_ADMIN) {
+        return res.status(403).json({ mensaje: "PIN de edición incorrecto. Operación denegada." });
+    }
+
+    try {
+        const queryText = `
+            UPDATE usuarios 
+            SET 
+                nombre = COALESCE($1, nombre),
+                apellido_paterno = COALESCE($2, apellido_paterno),
+                apellido_materno = COALESCE($3, apellido_materno),
+                email = COALESCE($4, email),
+                carrera_id = $5,
+                semestre_id = $6,
+                periodo_id = $7
+            WHERE numero_control = $8 AND rol = 'PERSONAL'
+            RETURNING numero_control, nombre;
+        `;
+        
+        const result = await db.query(queryText, [
+            nombre, apellidoPaterno, apellidoMaterno, 
+            email, carreraId || null, semestreId || null, periodoId || null, 
+            numeroControl
+        ]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ mensaje: "Integrante no encontrado." });
+        }
+
+        res.json({ exito: true, mensaje: "Perfil actualizado correctamente." });
+
+    } catch (error) {
+        console.error("Error al editar perfil del alumno:", error);
+        if (error.code === '23505') {
+            return res.status(400).json({ mensaje: "El correo electrónico ya pertenece a otro usuario." });
+        }
+        res.status(500).json({ mensaje: "Error interno al actualizar la información." });
+    }
+});
+
+// 4. Obtener perfil completo con los nombres de catálogos mediante LEFT JOIN (Para Alumno)
+app.get('/api/usuario/mi-perfil', verificarToken, async (req, res) => {
+    const numeroControl = req.usuario.numeroControl;
+
+    try {
+        const usuarioQuery = `
+            SELECT 
+                u.numero_control, u.nombre, u.apellido_paterno, u.apellido_materno, u.email, u.creado_en,
+                c.id AS carrera_id, c.nombre AS carrera_nombre,
+                s.id AS semestre_id, s.numero AS semestre_numero,
+                p.id AS periodo_id, p.nombre AS periodo_nombre
+            FROM usuarios u
+            LEFT JOIN catalogo_carreras c ON u.carrera_id = c.id
+            LEFT JOIN catalogo_semestre s ON u.semestre_id = s.id
+            LEFT JOIN catalogo_periodos p ON u.periodo_id = p.id
+            WHERE u.numero_control = $1;
+        `;
+        const usuarioRes = await db.query(usuarioQuery, [numeroControl]);
+
+        if (usuarioRes.rows.length === 0) {
+            return res.status(404).json({ mensaje: "Usuario no encontrado." });
+        }
+
+        const usuario = usuarioRes.rows[0];
+
+        // Calcular métricas personales de avance (480h)
+        const asistenciasRes = await db.query(
+            "SELECT fecha_hora, tipo_registro FROM asistencias WHERE numero_control = $1 ORDER BY fecha_hora ASC",
+            [numeroControl]
+        );
+        const asistencias = asistenciasRes.rows;
+
+        let msTotales = 0;
+        let entradaTemp = null;
+        const diasUnicos = new Set();
+
+        for (const reg of asistencias) {
+            diasUnicos.add(new Date(reg.fecha_hora).toDateString());
+            if (reg.tipo_registro === 'ENTRADA') {
+                entradaTemp = new Date(reg.fecha_hora);
+            } else if (reg.tipo_registro === 'SALIDA' && entradaTemp) {
+                msTotales += (new Date(reg.fecha_hora) - entradaTemp);
+                entradaTemp = null;
+            }
+        }
+
+        const minutosTotales = Math.floor(msTotales / (1000 * 60));
+        const horasTotales = Math.floor(minutosTotales / 60);
+        const minutosRestantes = minutosTotales % 60;
+        const metaHoras = 480;
+        const porcentajeAvance = Math.min(100, parseFloat(((horasTotales / metaHoras) * 100).toFixed(1)));
+
+        res.json({
+            exito: true,
+            perfil: usuario,
+            metricas: {
+                horasAcumuladas: horasTotales,
+                minutosAcumulados: minutosRestantes,
+                metaHoras,
+                porcentajeAvance,
+                diasAsistidos: diasUnicos.size,
+                totalMarcajes: asistencias.length
+            }
+        });
+
+    } catch (error) {
+        console.error("Error al consultar perfil del alumno:", error);
+        res.status(500).json({ mensaje: "Error interno al consultar la información de perfil." });
+    }
+});
+
 // -------------------------------------------------------------------
 // RUTAS DE AUTENTICACIÓN Y SISTEMA
 // -------------------------------------------------------------------
