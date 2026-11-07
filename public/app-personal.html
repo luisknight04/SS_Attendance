@@ -186,22 +186,32 @@
                 }
 
                 contenedor.innerHTML = asistencias.map(a => {
-                    const esSalida = a.tipo_registro === 'SALIDA';
-                    const badgeClass = esSalida 
-                        ? 'bg-rose-50 text-rose-600 border border-rose-100' 
-                        : 'bg-emerald-50 text-emerald-600 border border-emerald-100';
-                    const tipoTexto = a.tipo_registro || 'ENTRADA';
+    // Leer directamente el valor retornado desde PostgreSQL
+    const tipo = a.tipo_registro ? a.tipo_registro.toUpperCase() : 'ENTRADA';
+    const esSalida = tipo === 'SALIDA';
 
-                    return `
-                        <div class="p-3.5 flex justify-between items-center hover:bg-gray-50">
-                            <div>
-                                <p class="font-semibold text-gray-900">${new Date(a.fecha_hora).toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}</p>
-                                <p class="text-gray-400 font-mono mt-0.5">${new Date(a.fecha_hora).toLocaleTimeString()}</p>
-                            </div>
-                            <span class="${badgeClass} font-medium px-2.5 py-1 rounded-full text-xs">${tipoTexto}</span>
-                        </div>
-                    `;
-                }).join('');
+    const badgeClass = esSalida 
+        ? 'bg-rose-50 text-rose-600 border border-rose-100 font-bold px-2.5 py-1 rounded-full text-xs' 
+        : 'bg-emerald-50 text-emerald-600 border border-emerald-100 font-bold px-2.5 py-1 rounded-full text-xs';
+
+    const fechaStr = new Date(a.fecha_hora).toLocaleDateString('es-MX', { 
+        weekday: 'short', 
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric' 
+    });
+    const horaStr = new Date(a.fecha_hora).toLocaleTimeString('es-MX');
+
+    return `
+        <div class="p-3.5 flex justify-between items-center hover:bg-gray-50 border-b border-gray-100">
+            <div>
+                <p class="font-semibold text-gray-900">${fechaStr}</p>
+                <p class="text-gray-400 font-mono text-xs mt-0.5">${horaStr}</p>
+            </div>
+            <span class="${badgeClass}">${tipo}</span>
+        </div>
+    `;
+}).join('');
 
             } catch (err) {
                 console.error("Error al cargar reportes:", err);
