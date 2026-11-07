@@ -309,13 +309,15 @@ app.put('/api/admin/usuarios/:numeroControl/editar', verificarToken, esAdmin, as
 });
 
 // 4. Obtener perfil completo con los nombres de catálogos mediante LEFT JOIN (Para Alumno)
-app.get('/api/usuario/mi-perfil', verificarToken, async (req, res) => {
-    const numeroControl = req.usuario.numeroControl;
+// Obtener perfil completo y métricas de un alumno específico (Para el Administrador)
+app.get('/api/admin/usuarios/:numeroControl/perfil', verificarToken, esAdmin, async (req, res) => {
+    const { numeroControl } = req.params;
 
     try {
+        // Consulta SQL con LEFT JOIN hacia las tablas catálogo
         const usuarioQuery = `
             SELECT 
-                u.numero_control, u.nombre, u.apellido_paterno, u.apellido_materno, u.email, u.creado_en,
+                u.numero_control, u.nombre, u.apellido_paterno, u.apellido_materno, u.email, u.activo, u.creado_en,
                 c.id AS carrera_id, c.nombre AS carrera_nombre,
                 s.id AS semestre_id, s.numero AS semestre_numero,
                 p.id AS periodo_id, p.nombre AS periodo_nombre
@@ -323,21 +325,24 @@ app.get('/api/usuario/mi-perfil', verificarToken, async (req, res) => {
             LEFT JOIN catalogo_carreras c ON u.carrera_id = c.id
             LEFT JOIN catalogo_semestre s ON u.semestre_id = s.id
             LEFT JOIN catalogo_periodos p ON u.periodo_id = p.id
-            WHERE u.numero_control = $1;
+            WHERE u.numero_control = $1 AND u.rol = 'PERSONAL';
         `;
         const usuarioRes = await db.query(usuarioQuery, [numeroControl]);
 
         if (usuarioRes.rows.length === 0) {
-            return res.status(404).json({ mensaje: "Usuario no encontrado." });
+            return res.status(404).json({ exito: false, mensaje: "Integrante no encontrado en la base de datos." });
         }
 
         const usuario = usuarioRes.rows[0];
 
-        // Calcular métricas personales de avance (480h)
-        const asistenciasRes = await db.query(
-            "SELECT fecha_hora, tipo_registro FROM asistencias WHERE numero_control = $1 ORDER BY fecha_hora ASC",
-            [numeroControl]
-        );
+        // Consultar asistencias para las métricas del modal
+        const asistenciasQuery = `
+            SELECT fecha_hora, tipo_registro 
+            FROM asistencias 
+            WHERE numero_control = $1 
+            ORDER BY fecha_hora ASC;
+        `;
+        const asistenciasRes = await db.query(asistenciasQuery, [numeroControl]);
         const asistencias = asistenciasRes.rows;
 
         let msTotales = 0;
@@ -360,6 +365,7 @@ app.get('/api/usuario/mi-perfil', verificarToken, async (req, res) => {
         const metaHoras = 480;
         const porcentajeAvance = Math.min(100, parseFloat(((horasTotales / metaHoras) * 100).toFixed(1)));
 
+        // Responder en formato JSON limpio
         res.json({
             exito: true,
             perfil: usuario,
@@ -374,8 +380,13 @@ app.get('/api/usuario/mi-perfil', verificarToken, async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Error al consultar perfil del alumno:", error);
-        res.status(500).json({ mensaje: "Error interno al consultar la información de perfil." });
+        console.error("Error al obtener perfil por administrador:", error);
+        // Garantizar que SIEMPRE devuelva JSON y nunca una página HTML
+        res.status(500).json({ 
+            exito: false, 
+            mensaje: "Error interno al consultar la base de datos.", 
+            error: error.message 
+        });
     }
 });
 
