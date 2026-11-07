@@ -289,37 +289,41 @@ app.post('/api/asistencia/registrar', verificarToken, async (req, res) => {
 
         // 6. Si el registro fue SALIDA, calcular las horas acumuladas del día
         let horasMensaje = "";
-        if (nuevoTipo === 'SALIDA') {
-            const historialHoyQuery = `
-                SELECT tipo_registro, fecha_hora 
-                FROM asistencias 
-                WHERE numero_control = $1 AND fecha_hora::date = CURRENT_DATE 
-                ORDER BY fecha_hora ASC;
-            `;
-            const historialHoyRes = await db.query(historialHoyQuery, [numeroControl]);
-            const registrosHoy = historialHoyRes.rows;
+if (nuevoTipo === 'SALIDA') {
+    const historialHoyQuery = `
+        SELECT tipo_registro, fecha_hora 
+        FROM asistencias 
+        WHERE numero_control = $1 AND fecha_hora::date = CURRENT_DATE 
+        ORDER BY fecha_hora ASC;
+    `;
+    const historialHoyRes = await db.query(historialHoyQuery, [numeroControl]);
+    const registrosHoy = historialHoyRes.rows;
 
-            let msTotales = 0;
-            let entradaTemp = null;
+    let msTotales = 0;
+    let entradaTemp = null;
 
-            // Recorrer los registros ordenados para calcular bloques
-            for (const reg of registrosHoy) {
-                if (reg.tipo_registro === 'ENTRADA') {
-                    entradaTemp = new Date(reg.fecha_hora);
-                } else if (reg.tipo_registro === 'SALIDA' && entradaTemp) {
-                    const salidaTemp = new Date(reg.fecha_hora);
-                    msTotales += (salidaTemp - entradaTemp);
-                    entradaTemp = null; // Reiniciar para el siguiente bloque
-                }
-            }
-
-            // Convertir milisegundos a horas y minutos
-            const minutosTotales = Math.floor(msTotales / (1000 * 60));
-            const horas = Math.floor(minutosTotales / 60);
-            const minutos = minutosTotales % 60;
-
-            horasMensaje = ` Tiempo acumulado hoy: ${horas}h ${minutos}m (Meta diaria: 4h).`;
+    for (const reg of registrosHoy) {
+        if (reg.tipo_registro === 'ENTRADA') {
+            entradaTemp = new Date(reg.fecha_hora);
+        } else if (reg.tipo_registro === 'SALIDA' && entradaTemp) {
+            const salidaTemp = new Date(reg.fecha_hora);
+            msTotales += (salidaTemp - entradaTemp);
+            entradaTemp = null;
         }
+    }
+
+    const segundosTotales = Math.floor(msTotales / 1000);
+    const minutosTotales = Math.floor(segundosTotales / 60);
+    const horas = Math.floor(minutosTotales / 60);
+    const minutos = minutosTotales % 60;
+    const segundos = segundosTotales % 60;
+
+    if (minutosTotales === 0) {
+        horasMensaje = ` Tiempo acumulado hoy: ${segundos} segundos.`;
+    } else {
+        horasMensaje = ` Tiempo acumulado hoy: ${horas}h ${minutos}m (Meta diaria: 4h).`;
+    }
+}
 
         res.status(201).json({
             exito: true,
@@ -337,13 +341,13 @@ app.post('/api/asistencia/registrar', verificarToken, async (req, res) => {
     }
 });
 
-// 4. Mis Reportes (Para la app móvil del Personal - Solo Lectura)
+// 4. Endpoint para obtener el historial personal del alumno (Corregido con tipo_registro)
 app.get('/api/asistencia/mis-reportes', verificarToken, async (req, res) => {
     const numeroControl = req.usuario.numeroControl;
 
     try {
         const queryText = `
-            SELECT id, fecha_hora 
+            SELECT id, fecha_hora, tipo_registro 
             FROM asistencias 
             WHERE numero_control = $1 
             ORDER BY fecha_hora DESC;
@@ -351,6 +355,7 @@ app.get('/api/asistencia/mis-reportes', verificarToken, async (req, res) => {
         const result = await db.query(queryText, [numeroControl]);
         res.json({ asistencias: result.rows });
     } catch (error) {
+        console.error("Error al obtener reportes del alumno:", error);
         res.status(500).json({ mensaje: "Error al obtener historial" });
     }
 });
