@@ -124,10 +124,11 @@
                 <table class="w-full text-left border-collapse" id="tabla-asistencias">
                     <thead>
                         <tr class="border-b border-gray-100 text-xs font-semibold text-gray-400 uppercase tracking-wider bg-gray-50/50">
-                            <th class="py-3.5 px-6">Integrante</th>
-                            <th class="py-3.5 px-6">N° Control</th>
-                            <th class="py-3.5 px-6">Fecha y Hora</th>
-                            <th class="py-3.5 px-6">Estado</th>
+                            <th class="py-3 px-6 text-left">INTEGRANTE</th>
+                            <th class="py-3 px-6 text-left">N° CONTROL</th>
+                             <th class="py-3 px-6 text-left">FECHA Y HORA</th>
+                             <th class="py-3 px-6 text-left">TIPO</th>
+                             <th class="py-3 px-6 text-left">ESTADO</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100 text-sm text-gray-600" id="contenedor-filas">
@@ -223,55 +224,65 @@
         }
 
         // 3. Renderizar las tarjetas de KPIs y la tabla dinámicamente
-        function renderizarMetricasYTabla(asistencias, totalPersonal) {
-            const tbody = document.getElementById('contenedor-filas');
-            
-            // Actualizar Tarjetas de Métricas (KPIs)
-            document.getElementById('kpi-total').innerText = totalPersonal;
-            document.getElementById('kpi-registros-hoy').innerText = asistencias.length;
-            
-            // Contar marcajes únicos de hoy para el KPI "Presentes Hoy"
-            const hoyStr = new Date().toDateString();
-            const usuariosHoy = new Set(
-                asistencias
-                    .filter(a => new Date(a.fecha_hora).toDateString() === hoyStr)
-                    .map(a => a.numero_control)
-            );
-            document.getElementById('kpi-presentes').innerText = usuariosHoy.size;
+function renderizarMetricasYTabla(asistencias, totalPersonal) {
+    const tbody = document.getElementById('contenedor-filas');
+    
+    // Actualizar Tarjetas de Métricas (KPIs)
+    document.getElementById('kpi-total').innerText = totalPersonal;
+    document.getElementById('kpi-registros-hoy').innerText = asistencias.length;
+    
+    // Contar marcajes únicos de hoy para el KPI "Presentes Hoy"
+    const hoyStr = new Date().toDateString();
+    const usuariosHoy = new Set(
+        asistencias
+            .filter(a => new Date(a.fecha_hora).toDateString() === hoyStr)
+            .map(a => a.numero_control)
+    );
+    document.getElementById('kpi-presentes').innerText = usuariosHoy.size;
 
-            // Si no hay registros de asistencia aún en la base de datos
-            if (asistencias.length === 0) {
-                tbody.innerHTML = `
-                    <tr><td colspan="4" class="py-6 text-center text-gray-400">No hay registros de asistencia en la base de datos.</td></tr>
-                `;
-                return;
-            }
+    // Si no hay registros de asistencia en la base de datos
+    if (asistencias.length === 0) {
+        tbody.innerHTML = `
+            <tr><td colspan="5" class="py-6 text-center text-gray-400">No hay registros de asistencia en la base de datos.</td></tr>
+        `;
+        return;
+    }
 
-            // Construir las filas HTML dinámicamente
-            tbody.innerHTML = asistencias.map(a => {
-                const nombreCompleto = `${a.nombre} ${a.apellido_paterno} ${a.apellido_materno || ''}`.trim();
-                const fechaFormateada = new Date(a.fecha_hora).toLocaleString('es-MX', {
-                    year: 'numeric', month: 'short', day: 'numeric',
-                    hour: '2-digit', minute: '2-digit', second: '2-digit'
-                });
+    // Construir las filas HTML dinámicamente incluyendo la celda TIPO
+    tbody.innerHTML = asistencias.map(a => {
+        const nombreCompleto = `${a.nombre} ${a.apellido_paterno} ${a.apellido_materno || ''}`.trim();
+        const fechaFormateada = new Date(a.fecha_hora).toLocaleString('es-MX', {
+            year: 'numeric', month: 'short', day: 'numeric',
+            hour: '2-digit', minute: '2-digit', second: '2-digit'
+        });
 
-                return `
-                    <tr class="hover:bg-gray-50/80 transition-colors">
-                        <td class="py-4 px-6 font-medium text-gray-900 flex items-center gap-3">
-                            <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">
-                                ${a.nombre.substring(0, 1)}${a.apellido_paterno.substring(0, 1)}
-                            </div>
-                            <span class="font-semibold text-gray-900">${nombreCompleto}</span>
-                        </td>
-                        <td class="py-4 px-6 font-mono text-xs text-gray-600">${a.numero_control}</td>
-                        <td class="py-4 px-6 font-mono text-xs text-gray-600">${fechaFormateada}</td>
-                        <td class="py-4 px-6">
-                            <span class="bg-emerald-50 text-emerald-600 text-xs px-2.5 py-1 rounded-full font-medium inline-block">Registrado</span>
-                        </td>
-                    </tr>
-                `;
-            }).join('');
-        }
+        // Estilos condicionales según si es ENTRADA o SALIDA
+        const esSalida = a.tipo_registro === 'SALIDA';
+        const tipoTexto = a.tipo_registro || 'ENTRADA';
+        const tipoBadgeClass = esSalida 
+            ? 'bg-rose-50 text-rose-600 border border-rose-200' 
+            : 'bg-emerald-50 text-emerald-600 border border-emerald-200';
+
+        return `
+            <tr class="hover:bg-gray-50/80 transition-colors border-b border-gray-100">
+                <td class="py-4 px-6 font-medium text-gray-900 flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">
+                        ${a.nombre.substring(0, 1)}${a.apellido_paterno.substring(0, 1)}
+                    </div>
+                    <span class="font-semibold text-gray-900">${nombreCompleto}</span>
+                </td>
+                <td class="py-4 px-6 font-mono text-xs text-gray-600">${a.numero_control}</td>
+                <td class="py-4 px-6 font-mono text-xs text-gray-600">${fechaFormateada}</td>
+                <td class="py-4 px-6">
+                    <span class="${tipoBadgeClass} text-xs px-2.5 py-1 rounded-full font-bold inline-block">${tipoTexto}</span>
+                </td>
+                <td class="py-4 px-6">
+                    <span class="bg-blue-50 text-blue-600 text-xs px-2.5 py-1 rounded-full font-medium inline-block">Registrado</span>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
 
         // 4. Modal para dar de alta a nuevos integrantes
         document.getElementById('form-nuevo-usuario').addEventListener('submit', async (e) => {
