@@ -117,12 +117,11 @@ app.put('/api/admin/usuarios/:numeroControl/estado', verificarToken, esAdmin, as
     }
 });
 
-// 3. Obtener el historial completo y horas totales acumuladas de un estudiante
+// 3. Obtener el historial completo y horas totales acumuladas de un estudiante (Corregido contra Error 500)
 app.get('/api/admin/usuarios/:numeroControl/asistencias', verificarToken, esAdmin, async (req, res) => {
     const { numeroControl } = req.params;
 
     try {
-        // Consultar marcajes del usuario ordenados por fecha ascendente
         const queryText = `
             SELECT id, fecha_hora, tipo_registro 
             FROM asistencias 
@@ -132,7 +131,18 @@ app.get('/api/admin/usuarios/:numeroControl/asistencias', verificarToken, esAdmi
         const result = await db.query(queryText, [numeroControl]);
         const asistencias = result.rows;
 
-        // Calcular el acumulado total de horas históricas emparejando ENTRADA y SALIDA
+        // Si no hay registros de asistencia en la BD, responder limpiamente sin marcar error
+        if (asistencias.length === 0) {
+            return res.json({
+                exito: true,
+                numeroControl,
+                totalAsistencias: 0,
+                horasAcumuladas: { horas: 0, minutos: 0 },
+                historial: []
+            });
+        }
+
+        // Calcular el acumulado total de horas
         let msTotales = 0;
         let entradaTemp = null;
 
@@ -142,7 +152,7 @@ app.get('/api/admin/usuarios/:numeroControl/asistencias', verificarToken, esAdmi
             } else if (reg.tipo_registro === 'SALIDA' && entradaTemp) {
                 const salidaTemp = new Date(reg.fecha_hora);
                 msTotales += (salidaTemp - entradaTemp);
-                entradaTemp = null; // Reiniciar para el siguiente bloque
+                entradaTemp = null;
             }
         }
 
@@ -155,7 +165,7 @@ app.get('/api/admin/usuarios/:numeroControl/asistencias', verificarToken, esAdmi
             numeroControl,
             totalAsistencias: asistencias.length,
             horasAcumuladas: { horas, minutos },
-            historial: asistencias.reverse() // Enviar los más recientes primero para la vista
+            historial: [...asistencias].reverse()
         });
 
     } catch (error) {
