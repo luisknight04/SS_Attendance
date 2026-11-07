@@ -58,6 +58,112 @@ function esMonitorOAdmin(req, res, next) {
     }
 }
 
+// ===================================================================
+// ENDPOINTS DE GESTIÓN DE INTEGRANTES (ADMINISTRADOR)
+// ===================================================================
+
+// 1. Obtener la lista completa de integrantes de Servicio Social
+app.get('/api/admin/usuarios', verificarToken, esAdmin, async (req, res) => {
+    try {
+        const queryText = `
+            SELECT 
+                numero_control, 
+                nombre, 
+                apellido_paterno, 
+                apellido_materno, 
+                email, 
+                semestre_numero, 
+                periodo_servicio, 
+                activo, 
+                creado_en 
+            FROM usuarios 
+            WHERE rol = 'PERSONAL' 
+            ORDER BY apellido_paterno ASC;
+        `;
+        const result = await db.query(queryText);
+        res.json({ exito: true, usuarios: result.rows });
+    } catch (error) {
+        console.error("Error al obtener la lista de usuarios:", error);
+        res.status(500).json({ mensaje: "Error al consultar la lista de usuarios" });
+    }
+});
+
+// 2. Activar o Desactivar a un integrante (Baja lógica)
+app.put('/api/admin/usuarios/:numeroControl/estado', verificarToken, esAdmin, async (req, res) => {
+    const { numeroControl } = req.params;
+    const { activo } = req.body; // true o false
+
+    try {
+        const queryText = `
+            UPDATE usuarios 
+            SET activo = $1 
+            WHERE numero_control = $2 AND rol = 'PERSONAL' 
+            RETURNING numero_control, nombre, apellido_paterno, activo;
+        `;
+        const result = await db.query(queryText, [activo, numeroControl]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ mensaje: "Usuario no encontrado" });
+        }
+
+        res.json({ 
+            exito: true, 
+            mensaje: `El estatus del usuario ${numeroControl} se actualizó a ${activo ? 'ACTIVO' : 'INACTIVO'}.`, 
+            usuario: result.rows[0] 
+        });
+    } catch (error) {
+        console.error("Error al cambiar estatus de usuario:", error);
+        res.status(500).json({ mensaje: "Error al actualizar el estatus del usuario" });
+    }
+});
+
+// 3. Obtener el historial completo y horas totales acumuladas de un estudiante
+app.get('/api/admin/usuarios/:numeroControl/asistencias', verificarToken, esAdmin, async (req, res) => {
+    const { numeroControl } = req.params;
+
+    try {
+        // Consultar marcajes del usuario ordenados por fecha ascendente
+        const queryText = `
+            SELECT id, fecha_hora, tipo_registro 
+            FROM asistencias 
+            WHERE numero_control = $1 
+            ORDER BY fecha_hora ASC;
+        `;
+        const result = await db.query(queryText, [numeroControl]);
+        const asistencias = result.rows;
+
+        // Calcular el acumulado total de horas históricas emparejando ENTRADA y SALIDA
+        let msTotales = 0;
+        let entradaTemp = null;
+
+        for (const reg of asistencias) {
+            if (reg.tipo_registro === 'ENTRADA') {
+                entradaTemp = new Date(reg.fecha_hora);
+            } else if (reg.tipo_registro === 'SALIDA' && entradaTemp) {
+                const salidaTemp = new Date(reg.fecha_hora);
+                msTotales += (salidaTemp - entradaTemp);
+                entradaTemp = null; // Reiniciar para el siguiente bloque
+            }
+        }
+
+        const minutosTotales = Math.floor(msTotales / (1000 * 60));
+        const horas = Math.floor(minutosTotales / 60);
+        const minutos = minutosTotales % 60;
+
+        res.json({
+            exito: true,
+            numeroControl,
+            totalAsistencias: asistencias.length,
+            horasAcumuladas: { horas, minutos },
+            historial: asistencias.reverse() // Enviar los más recientes primero para la vista
+        });
+
+    } catch (error) {
+        console.error("Error al obtener historial del alumno:", error);
+        res.status(500).json({ mensaje: "Error al consultar el historial del alumno" });
+    }
+});
+
 // -------------------------------------------------------------------
 // RUTAS DE AUTENTICACIÓN Y SISTEMA
 // -------------------------------------------------------------------
