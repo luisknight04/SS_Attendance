@@ -59,7 +59,7 @@
             
             <div class="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm mb-4 flex justify-between items-center">
                 <div>
-                    <p class="text-xs font-medium text-gray-400">Total Registros Acumulados</p>
+                    <p class="text-xs font-medium text-gray-400">Total Marcajes Registrados</p>
                     <p class="text-2xl font-bold text-gray-900 mt-0.5" id="total-registros">0</p>
                 </div>
                 <div class="p-3 bg-blue-50 text-blue-600 rounded-xl">
@@ -139,35 +139,33 @@
             document.getElementById('user-avatar').innerText = usuario.nombre.substring(0, 2).toUpperCase();
         }
 
-            // Función para enviar el token QR escaneado al backend
-async function enviarEscaneoQR(qrToken) {
-    try {
-        const response = await fetch('/api/asistencia/registrar', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer ' + localStorage.getItem('jwt_token')
-            },
-            body: JSON.stringify({ qrToken })
-        });
+        // Función para enviar el token QR escaneado al backend
+        async function enviarEscaneoQR(qrToken) {
+            try {
+                const response = await fetch('/api/asistencia/registrar', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify({ qrToken })
+                });
 
-        const data = await response.json();
+                const data = await response.json();
 
-        if (response.ok && data.exito) {
-            // Mostrar notificación con el resultado automático y las horas acumuladas
-            alert(data.mensaje);
-            // Recargar la tabla local de reportes del alumno
-            if (typeof cargarMisReportes === 'function') {
-                cargarMisReportes();
+                if (response.ok && data.exito) {
+                    alert(data.mensaje);
+                    if (typeof cargarMisReportes === 'function') {
+                        cargarMisReportes();
+                    }
+                } else {
+                    alert(data.mensaje || "Error al registrar la asistencia.");
+                }
+            } catch (error) {
+                console.error("Error en la petición de asistencia:", error);
+                alert("Error de conexión con el servidor.");
             }
-        } else {
-            alert(data.mensaje || "Error al registrar la asistencia.");
         }
-    } catch (error) {
-        console.error("Error en la petición de asistencia:", error);
-        alert("Error de conexión con el servidor.");
-    }
-}
 
         // Cargar historial de reportes del propio usuario
         async function cargarMisReportes() {
@@ -187,15 +185,23 @@ async function enviarEscaneoQR(qrToken) {
                     return;
                 }
 
-                contenedor.innerHTML = asistencias.map(a => `
-                    <div class="p-3.5 flex justify-between items-center hover:bg-gray-50">
-                        <div>
-                            <p class="font-semibold text-gray-900">${new Date(a.fecha_hora).toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}</p>
-                            <p class="text-gray-400 font-mono mt-0.5">${new Date(a.fecha_hora).toLocaleTimeString()}</p>
+                contenedor.innerHTML = asistencias.map(a => {
+                    const esSalida = a.tipo_registro === 'SALIDA';
+                    const badgeClass = esSalida 
+                        ? 'bg-rose-50 text-rose-600 border border-rose-100' 
+                        : 'bg-emerald-50 text-emerald-600 border border-emerald-100';
+                    const tipoTexto = a.tipo_registro || 'ENTRADA';
+
+                    return `
+                        <div class="p-3.5 flex justify-between items-center hover:bg-gray-50">
+                            <div>
+                                <p class="font-semibold text-gray-900">${new Date(a.fecha_hora).toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}</p>
+                                <p class="text-gray-400 font-mono mt-0.5">${new Date(a.fecha_hora).toLocaleTimeString()}</p>
+                            </div>
+                            <span class="${badgeClass} font-medium px-2.5 py-1 rounded-full text-xs">${tipoTexto}</span>
                         </div>
-                        <span class="bg-emerald-50 text-emerald-600 font-medium px-2.5 py-1 rounded-full">Registrado</span>
-                    </div>
-                `).join('');
+                    `;
+                }).join('');
 
             } catch (err) {
                 console.error("Error al cargar reportes:", err);
@@ -271,7 +277,7 @@ async function enviarEscaneoQR(qrToken) {
         // Inicializar la Cámara del Móvil
         const html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 200 });
         html5QrcodeScanner.render((decodedText) => {
-            registrarAsistencia(decodedText);
+            enviarEscaneoQR(decodedText);
         });
     </script>
 </body>
