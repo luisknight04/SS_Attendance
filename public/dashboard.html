@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Administración - Control de Asistencia</title>
+    <!-- Tailwind CSS desde CDN para diseño responsivo -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Librería de Íconos Lucide -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans antialiased min-h-screen flex flex-col">
+
+    <!-- BARRA NAVEGACIÓN SUPERIOR -->
+    <header class="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                
+                <div class="flex items-center gap-3">
+                    <div class="bg-blue-600 text-white p-2 rounded-xl">
+                        <i data-lucide="shield-check" class="w-6 h-6"></i>
+                    </div>
+                    <span class="font-bold text-xl text-gray-900 tracking-tight">ControlSocial</span>
+                </div>
+
+                <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-3 border-l pl-4 border-gray-200">
+                        <div class="w-9 h-9 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-xs" id="admin-avatar">
+                            AD
+                        </div>
+                        <div class="hidden sm:block text-left">
+                            <p class="text-sm font-semibold text-gray-900 leading-none" id="admin-nombre">Administrador</p>
+                            <p class="text-xs text-gray-500 mt-1" id="admin-nc">NC: ADMIN01</p>
+                        </div>
+                    </div>
+                    <button onclick="cerrarSesion()" class="p-2 text-gray-400 hover:text-rose-600 rounded-xl hover:bg-gray-100 transition-colors" title="Cerrar sesión">
+                        <i data-lucide="log-out" class="w-5 h-5"></i>
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </header>
+
+    <!-- CONTENIDO PRINCIPAL -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full">
+        
+        <!-- Encabezado -->
+        <div class="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+                <span class="text-xs font-semibold tracking-wider text-gray-400 uppercase">SERVICIO SOCIAL › PANEL GENERAL</span>
+                <h1 class="text-3xl font-extrabold text-gray-900 mt-1">Gestión de Asistencias</h1>
+                <p class="text-sm text-gray-500 mt-1">Monitoreo en tiempo real del personal de servicio social.</p>
+            </div>
+            
+            <button onclick="abrirModalUsuario()" class="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-sm transition-all w-fit">
+                <i data-lucide="user-plus" class="w-4 h-4"></i>
+                <span>Registrar integrante</span>
+            </button>
+        </div>
+
+        <!-- TARJETAS DE MÉTRICAS (KPIs) -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+            <div class="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                <div class="flex justify-between items-start">
+                    <div class="p-2.5 bg-blue-50 text-blue-600 rounded-xl">
+                        <i data-lucide="users" class="w-5 h-5"></i>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <p class="text-xs font-medium text-gray-400">Total Integrantes</p>
+                    <p class="text-3xl font-bold text-gray-900 mt-1" id="kpi-total">—</p>
+                </div>
+            </div>
+
+            <div class="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                <div class="flex justify-between items-start">
+                    <div class="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl">
+                        <i data-lucide="check-circle" class="w-5 h-5"></i>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <p class="text-xs font-medium text-gray-400">Presentes Hoy</p>
+                    <p class="text-3xl font-bold text-gray-900 mt-1" id="kpi-presentes">—</p>
+                </div>
+            </div>
+
+            <div class="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                <div class="flex justify-between items-start">
+                    <div class="p-2.5 bg-amber-50 text-amber-600 rounded-xl">
+                        <i data-lucide="clock" class="w-5 h-5"></i>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <p class="text-xs font-medium text-gray-400">Registros Hoy</p>
+                    <p class="text-3xl font-bold text-gray-900 mt-1" id="kpi-registros-hoy">—</p>
+                </div>
+            </div>
+
+            <div class="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                <div class="flex justify-between items-start">
+                    <div class="p-2.5 bg-purple-50 text-purple-600 rounded-xl">
+                        <i data-lucide="calendar" class="w-5 h-5"></i>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <p class="text-xs font-medium text-gray-400">Estado del Sistema</p>
+                    <p class="text-lg font-bold text-emerald-600 mt-1">Activo</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- SELECTOR DE PESTAÑAS DEL DASHBOARD -->
+        <div class="flex items-center gap-2 mb-4 border-b border-gray-200 pb-2">
+            <button onclick="cambiarPestana('asistencias')" id="tab-btn-asistencias" class="px-4 py-2 text-sm font-bold text-blue-600 border-b-2 border-blue-600 transition-all flex items-center gap-2">
+                <i data-lucide="clock" class="w-4 h-4"></i>
+                <span>Historial de Marcajes</span>
+            </button>
+            <button onclick="cambiarPestana('alumnos')" id="tab-btn-alumnos" class="px-4 py-2 text-sm font-medium text-gray-400 hover:text-gray-700 transition-all flex items-center gap-2">
+                <i data-lucide="users" class="w-4 h-4"></i>
+                <span>Directorio de Integrantes</span>
+            </button>
+        </div>
+
+        <!-- SECCIÓN 1: TABLA DE HISTORIAL DE MARCAJES -->
+        <div id="seccion-asistencias" class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div class="p-5 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <h2 class="font-bold text-gray-900 text-lg">Historial de Marcajes</h2>
+                    <p class="text-xs text-gray-400">Haz clic en cualquier registro para abrir el expediente del alumno.</p>
+                </div>
+                <div class="relative w-full sm:w-64">
+                    <i data-lucide="search" class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2"></i>
+                    <input type="text" id="input-busqueda" placeholder="Buscar por N° Control..." onkeyup="filtrarTabla()" class="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-blue-500">
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse" id="tabla-asistencias">
+                    <thead>
+                        <tr class="border-b border-gray-100 text-xs font-semibold text-gray-400 uppercase tracking-wider bg-gray-50/50">
+                            <th class="py-3 px-6 text-left">INTEGRANTE</th>
+                            <th class="py-3 px-6 text-left">N° CONTROL</th>
+                             <th class="py-3 px-6 text-left">FECHA Y HORA</th>
+                             <th class="py-3 px-6 text-left">TIPO</th>
+                             <th class="py-3 px-6 text-left">ESTADO</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100 text-sm text-gray-600" id="contenedor-filas">
+                        <tr>
+                            <td colspan="5" class="py-6 text-center text-gray-400">Cargando registros...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- SECCIÓN 2: DIRECTORIO DE INTEGRANTES -->
+        <div id="seccion-alumnos" class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hidden">
+            <div class="p-5 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <h2 class="font-bold text-gray-900 text-lg">Directorio de Alumnos Registrados</h2>
+                    <p class="text-xs text-gray-400">Listado completo de alumnos, estatus de servicio social y expedientes.</p>
+                </div>
+                <div class="relative w-full sm:w-64">
+                    <i data-lucide="search" class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2"></i>
+                    <input type="text" id="input-busqueda-alumnos" placeholder="Buscar alumno..." onkeyup="filtrarTablaAlumnos()" class="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-blue-500">
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse" id="tabla-alumnos">
+                    <thead>
+                        <tr class="border-b border-gray-100 text-xs font-semibold text-gray-400 uppercase tracking-wider bg-gray-50/50">
+                            <th class="py-3 px-6 text-left">ALUMNO</th>
+                            <th class="py-3 px-6 text-left">N° CONTROL</th>
+                            <th class="py-3 px-6 text-left">CARRERA</th>
+                            <th class="py-3 px-6 text-left">SEMESTRE / PERIODO</th>
+                            <th class="py-3 px-6 text-left">ESTATUS</th>
+                            <th class="py-3 px-6 text-center">ACCIONES</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100 text-sm text-gray-600" id="contenedor-alumnos">
+                        <tr>
+                            <td colspan="6" class="py-6 text-center text-gray-400">Cargando lista de alumnos...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- ========================================== -->
+    <!-- ZONA DE MODALES (ANTES DEL SCRIPT) -->
+    <!-- ========================================== -->
+
+    <!-- MODAL 1: REGISTRAR NUEVO INTEGRANTE -->
+    <div id="modal-usuario" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 hidden z-50">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl overflow-y-auto max-h-[90vh]">
+            <h3 class="font-bold text-gray-900 text-lg mb-1">Alta de Personal</h3>
+            <p class="text-xs text-gray-500 mb-4">Ingresa los datos del estudiante de servicio social.</p>
+
+            <form id="form-nuevo-usuario" class="space-y-3">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Número de Control Estudiantil</label>
+                    <input type="text" id="nuevo-nc" required placeholder="Ej. 22110102" class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-blue-500">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">Nombre(s)</label>
+                        <input type="text" id="nuevo-nombre" required placeholder="Ej. Juan" class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">Apellido Paterno</label>
+                        <input type="text" id="nuevo-paterno" required placeholder="Ej. Pérez" class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-blue-500">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">Apellido Materno</label>
+                        <input type="text" id="nuevo-materno" placeholder="Opcional" class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">Correo Electrónico</label>
+                        <input type="email" id="nuevo-email" required placeholder="correo@institucion.edu.mx" class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-blue-500">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Contraseña Inicial</label>
+                    <input type="password" id="nuevo-password" required placeholder="••••••••" class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-blue-500">
+                </div>
+
+                <!-- Selectores de Catálogos -->
+                <div class="grid grid-cols-3 gap-2">
+                    <div>
+                        <label class="block text-[11px] font-semibold text-gray-600 mb-1">Carrera</label>
+                        <select id="nuevo-carrera" class="w-full px-2 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-blue-500">
+                            <option value="">Selecciona</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-semibold text-gray-600 mb-1">Semestre</label>
+                        <select id="nuevo-semestre" class="w-full px-2 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-blue-500">
+                            <option value="">Selecciona</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-semibold text-gray-600 mb-1">Periodo</label>
+                        <select id="nuevo-periodo" class="w-full px-2 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-blue-500">
+                            <option value="">Selecciona</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="msg-error-modal" class="text-xs text-rose-500 font-semibold hidden"></div>
+
+                <div class="flex gap-2 pt-2">
+                    <button type="button" onclick="cerrarModalUsuario()" class="w-1/2 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-xs font-semibold">Cancelar</button>
+                    <button type="submit" class="w-1/2 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-semibold hover:bg-blue-700">Guardar Integrante</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 2: PERFIL Y EDICIÓN DE INTEGRANTE -->
+    <div id="modal-perfil-alumno" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 hidden z-50">
+        <div class="bg-white rounded-3xl p-6 w-full max-w-xl shadow-2xl overflow-y-auto max-h-[90vh]">
+            
+            <!-- Encabezado del Modal -->
+            <div class="flex justify-between items-start border-b border-gray-100 pb-4 mb-4">
+                <div>
+                    <h3 id="modal-nombre-alumno" class="font-bold text-gray-900 text-lg">Cargando integrante...</h3>
+                    <p id="modal-nc-alumno" class="text-xs text-gray-400 font-mono">NC: ----</p>
+                </div>
+                <button onclick="cerrarModalPerfil()" class="text-gray-400 hover:text-gray-600 p-1 rounded-xl">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- Tarjetas de Métricas de Progreso -->
+            <div class="grid grid-cols-3 gap-3 mb-6">
+                <div class="bg-blue-50/80 p-3 rounded-2xl border border-blue-100 text-center">
+                    <p class="text-[10px] uppercase font-bold text-blue-600">Avance Total</p>
+                    <p id="metric-porcentaje" class="text-lg font-extrabold text-blue-900 mt-0.5">0%</p>
+                </div>
+                <div class="bg-emerald-50/80 p-3 rounded-2xl border border-emerald-100 text-center">
+                    <p class="text-[10px] uppercase font-bold text-emerald-600">Horas Acumuladas</p>
+                    <p id="metric-horas" class="text-lg font-extrabold text-emerald-900 mt-0.5">0h 0m</p>
+                </div>
+                <div class="bg-purple-50/80 p-3 rounded-2xl border border-purple-100 text-center">
+                    <p class="text-[10px] uppercase font-bold text-purple-600">Días Asistidos</p>
+                    <p id="metric-dias" class="text-lg font-extrabold text-purple-900 mt-0.5">0 días</p>
+                </div>
+            </div>
+
+            <!-- Formulario de Edición de Datos Académicos -->
+            <form id="form-editar-perfil" class="space-y-4">
+                <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Datos Académicos y Personales</h4>
+                
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">Nombre(s)</label>
+                        <input type="text" id="edit-nombre" required class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">Apellido Paterno</label>
+                        <input type="text" id="edit-paterno" required class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-blue-500">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">Apellido Materno</label>
+                        <input type="text" id="edit-materno" class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">Correo Electrónico</label>
+                        <input type="email" id="edit-email" required class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-blue-500">
+                    </div>
+                </div>
+
+                <!-- Listas desplegables desde catálogos normalizados -->
+                <div class="grid grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">Carrera</label>
+                        <select id="edit-carrera" class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-blue-500">
+                            <option value="">Cargando...</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">Semestre</label>
+                        <select id="edit-semestre" class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-blue-500">
+                            <option value="">Cargando...</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">Periodo</label>
+                        <select id="edit-periodo" class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-blue-500">
+                            <option value="">Cargando...</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Campo de PIN de Edición -->
+                <div class="pt-2 border-t border-gray-100">
+                    <label class="block text-xs font-bold text-rose-600 mb-1">PIN de Seguridad para Autorizar Cambios</label>
+                    <input type="password" id="edit-pin" placeholder="Ingresa la clave secundaria" required class="w-full px-3 py-2 bg-rose-50/50 border border-rose-200 rounded-xl text-xs focus:outline-none focus:border-rose-500">
+                </div>
+
+                <div class="flex gap-2 pt-2">
+                    <button type="button" onclick="cerrarModalPerfil()" class="w-1/2 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-xs font-semibold">Cancelar</button>
+                    <button type="submit" class="w-1/2 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-semibold hover:bg-blue-700">Guardar Cambios</button>
+                </div>
+            </form>
+
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- LÓGICA DE JAVASCRIPT CONECTADA AL BACKEND -->
+    <!-- ========================================== -->
+    <script>
+        lucide.createIcons();
+        const token = localStorage.getItem('jwt_token');
+        let alumnoSeleccionadoNC = null;
+
+        // 1. Validar sesión de administrador antes de cargar
+        if (!token) {
+            window.location.href = '/login.html';
+        }
+
+        // 2. Cargar información del Administrador y Tabla de asistencias
+        async function cargarDashboard() {
+            try {
+                // Decodificar info del administrador
+                const usuario = JSON.parse(localStorage.getItem('usuario_info') || '{}');
+                if (usuario.nombre) {
+                    const nombreCompleto = `${usuario.nombre} ${usuario.apellidoPaterno || ''}`.trim();
+                    document.getElementById('admin-nombre').innerText = nombreCompleto;
+                    document.getElementById('admin-nc').innerText = "NC: " + usuario.numeroControl;
+                    document.getElementById('admin-avatar').innerText = usuario.nombre.substring(0, 2).toUpperCase();
+                }
+
+                // Petición HTTP al backend para obtener todas las asistencias
+                const res = await fetch('/api/admin/asistencias', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+
+                if (res.status === 401 || res.status === 403) {
+                    cerrarSesion();
+                    return;
+                }
+
+                const data = await res.json();
+                
+                if (data.exito) {
+                    renderizarMetricasYTabla(data.asistencias || [], data.totalPersonal || 0);
+                }
+            } catch (err) {
+                console.error("Error al cargar dashboard:", err);
+                document.getElementById('contenedor-filas').innerHTML = `
+                    <tr><td colspan="5" class="py-6 text-center text-rose-500 font-semibold">Error al conectar con el servidor.</td></tr>
+                `;
+            }
+        }
+
+        // 3. Renderizar las tarjetas de KPIs y la tabla dinámicamente
+        function renderizarMetricasYTabla(asistencias, totalPersonal) {
+            const tbody = document.getElementById('contenedor-filas');
+            
+            document.getElementById('kpi-total').innerText = totalPersonal;
+            document.getElementById('kpi-registros-hoy').innerText = asistencias.length;
+            
+            const hoyStr = new Date().toDateString();
+            const usuariosHoy = new Set(
+                asistencias
+                    .filter(a => new Date(a.fecha_hora).toDateString() === hoyStr)
+                    .map(a => a.numero_control)
+            );
+            document.getElementById('kpi-presentes').innerText = usuariosHoy.size;
+
+            if (asistencias.length === 0) {
+                tbody.innerHTML = `
+                    <tr><td colspan="5" class="py-6 text-center text-gray-400">No hay registros de asistencia en la base de datos.</td></tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = asistencias.map(a => {
+                const nombreCompleto = `${a.nombre} ${a.apellido_paterno} ${a.apellido_materno || ''}`.trim();
+                const fechaFormateada = new Date(a.fecha_hora).toLocaleString('es-MX', {
+                    year: 'numeric', month: 'short', day: 'numeric',
+                    hour: '2-digit', minute: '2-digit', second: '2-digit'
+                });
+
+                const esSalida = a.tipo_registro === 'SALIDA';
+                const tipoTexto = a.tipo_registro || 'ENTRADA';
+                const tipoBadgeClass = esSalida 
+                    ? 'bg-rose-50 text-rose-600 border border-rose-200' 
+                    : 'bg-emerald-50 text-emerald-600 border border-emerald-200';
+
+                return `
+                    <tr class="hover:bg-gray-50/80 transition-colors border-b border-gray-100 cursor-pointer" onclick="abrirPerfilAlumno('${a.numero_control}')">
+                        <td class="py-4 px-6 font-medium text-gray-900 flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">
+                                ${a.nombre.substring(0, 1)}${a.apellido_paterno.substring(0, 1)}
+                            </div>
+                            <span class="font-semibold text-gray-900">${nombreCompleto}</span>
+                        </td>
+                        <td class="py-4 px-6 font-mono text-xs text-gray-600">${a.numero_control}</td>
+                        <td class="py-4 px-6 font-mono text-xs text-gray-600">${fechaFormateada}</td>
+                        <td class="py-4 px-6">
+                            <span class="${tipoBadgeClass} text-xs px-2.5 py-1 rounded-full font-bold inline-block">${tipoTexto}</span>
+                        </td>
+                        <td class="py-4 px-6">
+                            <span class="bg-blue-50 text-blue-600 text-xs px-2.5 py-1 rounded-full font-medium inline-block">Registrado</span>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // 4. Cargar opciones de los catálogos en modales de edición y alta
+        async function cargarCatalogos() {
+            try {
+                const response = await fetch('/api/catalogos', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const data = await response.json();
+
+                if (data.exito) {
+                    const carrerasOpts = '<option value="">Selecciona Carrera</option>' + 
+                        data.carreras.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
+                    const semestresOpts = '<option value="">Selecciona Semestre</option>' + 
+                        data.semestres.map(s => `<option value="${s.id}">Semestre ${s.numero}</option>`).join('');
+                    const periodosOpts = '<option value="">Selecciona Periodo</option>' + 
+                        data.periodos.map(p => `<option value="${p.id}">${p.nombre}</option>`).join('');
+
+                    document.getElementById('edit-carrera').innerHTML = carrerasOpts;
+                    document.getElementById('edit-semestre').innerHTML = semestresOpts;
+                    document.getElementById('edit-periodo').innerHTML = periodosOpts;
+
+                    const nuevoCarrera = document.getElementById('nuevo-carrera');
+                    const nuevoSemestre = document.getElementById('nuevo-semestre');
+                    const nuevoPeriodo = document.getElementById('nuevo-periodo');
+                    if (nuevoCarrera) nuevoCarrera.innerHTML = carrerasOpts;
+                    if (nuevoSemestre) nuevoSemestre.innerHTML = semestresOpts;
+                    if (nuevoPeriodo) nuevoPeriodo.innerHTML = periodosOpts;
+                }
+            } catch (error) {
+                console.error("Error al cargar los catálogos:", error);
+            }
+        }
+
+        // 4.1 Cargar Directorio Completo de Alumnos (Pestaña 2)
+        let listaAlumnosGlobal = [];
+        async function cargarUsuariosDirectorio() {
+            try {
+                const res = await fetch('/api/admin/usuarios', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const data = await res.json();
+                if (data.exito) {
+                    listaAlumnosGlobal = data.usuarios || [];
+                    renderizarUsuariosDirectorio(listaAlumnosGlobal);
+                }
+            } catch (err) {
+                console.error("Error al cargar directorio de alumnos:", err);
+            }
+        }
+
+        function renderizarUsuariosDirectorio(alumnos) {
+            const tbody = document.getElementById('contenedor-alumnos');
+            if (!tbody) return;
+
+            if (alumnos.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="py-6 text-center text-gray-400">No hay integrantes registrados en el sistema.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = alumnos.map(u => {
+                const nombreCompleto = `${u.nombre} ${u.apellido_paterno} ${u.apellido_materno || ''}`.trim();
+                const carrera = u.carrera_nombre || 'No asignada';
+                const semestre = u.semestre_numero ? `Sem. ${u.semestre_numero}` : '—';
+                const periodo = u.periodo_nombre || '—';
+                const activo = u.activo;
+
+                const statusBadge = activo
+                    ? `<button onclick="alternarEstadoAlumno('${u.numero_control}', true, event)" class="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-xs font-semibold hover:bg-emerald-100 transition-colors" title="Clic para desactivar">● Activo</button>`
+                    : `<button onclick="alternarEstadoAlumno('${u.numero_control}', false, event)" class="px-2.5 py-1 bg-rose-50 text-rose-700 border border-rose-200 rounded-full text-xs font-semibold hover:bg-rose-100 transition-colors" title="Clic para activar">○ Inactivo</button>`;
+
+                return `
+                    <tr class="hover:bg-gray-50/80 transition-colors border-b border-gray-100 cursor-pointer" onclick="abrirPerfilAlumno('${u.numero_control}')">
+                        <td class="py-3.5 px-6 font-medium text-gray-900 flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">
+                                ${u.nombre.substring(0, 1)}${u.apellido_paterno.substring(0, 1)}
+                            </div>
+                            <span class="font-semibold text-gray-900">${nombreCompleto}</span>
+                        </td>
+                        <td class="py-3.5 px-6 font-mono text-xs text-gray-600">${u.numero_control}</td>
+                        <td class="py-3.5 px-6 text-xs text-gray-600 max-w-[200px] truncate" title="${carrera}">${carrera}</td>
+                        <td class="py-3.5 px-6 text-xs text-gray-600">${semestre} • ${periodo}</td>
+                        <td class="py-3.5 px-6">${statusBadge}</td>
+                        <td class="py-3.5 px-6 text-center">
+                            <button onclick="event.stopPropagation(); abrirPerfilAlumno('${u.numero_control}')" class="px-3 py-1 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-xl text-xs font-semibold transition-colors">
+                                Expediente
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // 4.2 Alternar Estado Activo / Inactivo de un Alumno
+        async function alternarEstadoAlumno(numeroControl, estadoActual, event) {
+            if (event) event.stopPropagation();
+            const nuevoEstado = !estadoActual;
+            const accion = nuevoEstado ? 'activar' : 'desactivar';
+            if (!confirm(`¿Deseas ${accion} el acceso al alumno con N° Control ${numeroControl}?`)) return;
+
+            try {
+                const res = await fetch(`/api/admin/usuarios/${numeroControl}/estado`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify({ activo: nuevoEstado })
+                });
+                const data = await res.json();
+                if (res.ok && data.exito) {
+                    alert(data.mensaje);
+                    cargarUsuariosDirectorio();
+                    cargarDashboard();
+                } else {
+                    alert(data.mensaje || 'Error al actualizar el estado.');
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Error de conexión al cambiar el estado.');
+            }
+        }
+
+        // 4.3 Control de Pestañas del Dashboard
+        function cambiarPestana(tab) {
+            const secAsistencias = document.getElementById('seccion-asistencias');
+            const secAlumnos = document.getElementById('seccion-alumnos');
+            const btnAsistencias = document.getElementById('tab-btn-asistencias');
+            const btnAlumnos = document.getElementById('tab-btn-alumnos');
+
+            if (tab === 'asistencias') {
+                secAsistencias.classList.remove('hidden');
+                secAlumnos.classList.add('hidden');
+                btnAsistencias.className = "px-4 py-2 text-sm font-bold text-blue-600 border-b-2 border-blue-600 transition-all flex items-center gap-2";
+                btnAlumnos.className = "px-4 py-2 text-sm font-medium text-gray-400 hover:text-gray-700 transition-all flex items-center gap-2";
+            } else {
+                secAsistencias.classList.add('hidden');
+                secAlumnos.classList.remove('hidden');
+                btnAlumnos.className = "px-4 py-2 text-sm font-bold text-blue-600 border-b-2 border-blue-600 transition-all flex items-center gap-2";
+                btnAsistencias.className = "px-4 py-2 text-sm font-medium text-gray-400 hover:text-gray-700 transition-all flex items-center gap-2";
+                cargarUsuariosDirectorio();
+            }
+        }
+
+        // 5. Abrir Perfil y validación de respuesta JSON (Protección contra error 404 de Render)
+        async function abrirPerfilAlumno(numeroControl) {
+            alumnoSeleccionadoNC = numeroControl;
+            await cargarCatalogos();
+
+            try {
+                const response = await fetch(`/api/admin/usuarios/${numeroControl}/perfil`, {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+
+                // Validar que la respuesta sea un JSON válido y no una página HTML de error 404
+                const contentType = response.headers.get("content-type");
+                if (!contentType || !contentType.includes("application/json")) {
+                    alert("El servidor no pudo procesar la solicitud. Es probable que los cambios en el backend aún se estén desplegando en Render. Inténtalo en un par de minutos.");
+                    return;
+                }
+
+                const data = await response.json();
+
+                if (data.exito) {
+                    const p = data.perfil;
+                    const m = data.metricas;
+
+                    document.getElementById('modal-nombre-alumno').innerText = `${p.nombre} ${p.apellido_paterno} ${p.apellido_materno || ''}`.trim();
+                    document.getElementById('modal-nc-alumno').innerText = "NC: " + p.numero_control;
+
+                    document.getElementById('metric-porcentaje').innerText = `${m.porcentajeAvance}%`;
+                    document.getElementById('metric-horas').innerText = `${m.horasAcumuladas}h ${m.minutosAcumulados}m`;
+                    document.getElementById('metric-dias').innerText = `${m.diasAsistidos} días`;
+
+                    document.getElementById('edit-nombre').value = p.nombre || '';
+                    document.getElementById('edit-paterno').value = p.apellido_paterno || '';
+                    document.getElementById('edit-materno').value = p.apellido_materno || '';
+                    document.getElementById('edit-email').value = p.email || '';
+                    document.getElementById('edit-carrera').value = p.carrera_id || '';
+                    document.getElementById('edit-semestre').value = p.semestre_id || '';
+                    document.getElementById('edit-periodo').value = p.periodo_id || '';
+                    document.getElementById('edit-pin').value = '';
+
+                    document.getElementById('modal-perfil-alumno').classList.remove('hidden');
+                } else {
+                    alert(data.mensaje || "Error al cargar la información del integrante.");
+                }
+            } catch (error) {
+                console.error("Error al obtener expediente:", error);
+            }
+        }
+
+        // 6. Enviar Formulario de Edición de Perfil
+        document.getElementById('form-editar-perfil').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const payload = {
+                nombre: document.getElementById('edit-nombre').value,
+                apellidoPaterno: document.getElementById('edit-paterno').value,
+                apellidoMaterno: document.getElementById('edit-materno').value,
+                email: document.getElementById('edit-email').value,
+                carreraId: document.getElementById('edit-carrera').value || null,
+                semestreId: document.getElementById('edit-semestre').value || null,
+                periodoId: document.getElementById('edit-periodo').value || null,
+                pinEdicion: document.getElementById('edit-pin').value
+            };
+
+            try {
+                const response = await fetch(`/api/admin/usuarios/${alumnoSeleccionadoNC}/editar`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.exito) {
+                    alert("¡Perfil actualizado con éxito!");
+                    cerrarModalPerfil();
+                    cargarDashboard();
+                    cargarUsuariosDirectorio();
+                } else {
+                    alert(data.mensaje || "Error al autorizar los cambios.");
+                }
+            } catch (error) {
+                console.error("Error al enviar formulario de edición:", error);
+                alert("Error de conexión con el servidor.");
+            }
+        });
+
+        // 7. Enviar Formulario de Nuevo Usuario
+        document.getElementById('form-nuevo-usuario').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const msgError = document.getElementById('msg-error-modal');
+            msgError.classList.add('hidden');
+
+            const payload = {
+                numeroControl: document.getElementById('nuevo-nc').value,
+                nombre: document.getElementById('nuevo-nombre').value,
+                apellidoPaterno: document.getElementById('nuevo-paterno').value,
+                apellidoMaterno: document.getElementById('nuevo-materno').value,
+                email: document.getElementById('nuevo-email').value,
+                password: document.getElementById('nuevo-password').value,
+                carreraId: document.getElementById('nuevo-carrera').value || null,
+                semestreId: document.getElementById('nuevo-semestre').value || null,
+                periodoId: document.getElementById('nuevo-periodo').value || null
+            };
+
+            try {
+                const res = await fetch('/api/admin/usuarios', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await res.json();
+
+                if (res.ok) {
+                    alert("¡Usuario registrado correctamente!");
+                    cerrarModalUsuario();
+                    document.getElementById('form-nuevo-usuario').reset();
+                    cargarDashboard();
+                    cargarUsuariosDirectorio();
+                } else {
+                    msgError.innerText = data.mensaje || "Error al registrar usuario";
+                    msgError.classList.remove('hidden');
+                }
+            } catch (err) {
+                msgError.innerText = "Error de conexión con el servidor";
+                msgError.classList.remove('hidden');
+            }
+        });
+
+        // Utilidades del Modal e Interfaz
+        async function abrirModalUsuario() { 
+            await cargarCatalogos();
+            document.getElementById('modal-usuario').classList.remove('hidden'); 
+        }
+        function cerrarModalUsuario() { document.getElementById('modal-usuario').classList.add('hidden'); }
+        function cerrarModalPerfil() { document.getElementById('modal-perfil-alumno').classList.add('hidden'); }
+        
+        function cerrarSesion() {
+            localStorage.removeItem('jwt_token');
+            localStorage.removeItem('usuario_info');
+            window.location.href = '/login.html';
+        }
+
+        function filtrarTabla() {
+            const query = document.getElementById('input-busqueda').value.toLowerCase();
+            const filas = document.querySelectorAll('#contenedor-filas tr');
+            filas.forEach(fila => {
+                const texto = fila.innerText.toLowerCase();
+                fila.style.display = texto.includes(query) ? '' : 'none';
+            });
+        }
+
+        function filtrarTablaAlumnos() {
+            const query = document.getElementById('input-busqueda-alumnos').value.toLowerCase();
+            const filtrados = listaAlumnosGlobal.filter(u => {
+                const completo = `${u.nombre} ${u.apellido_paterno} ${u.apellido_materno || ''} ${u.numero_control} ${u.carrera_nombre || ''}`.toLowerCase();
+                return completo.includes(query);
+            });
+            renderizarUsuariosDirectorio(filtrados);
+        }
+
+        // Inicialización
+        cargarDashboard();
+        cargarUsuariosDirectorio();
+    </script>
+</body>
+</html>
